@@ -6,9 +6,12 @@ MODELS="$APP_DIR/models"
 mkdir -p "$MODELS/piper"
 
 VOSK=vosk-model-small-en-us-0.15
+# alphacephei.com is unreachable from some networks (it was at the hackathon);
+# the HuggingFace mirror serves the identical zip.
+VOSK_URL="${VOSK_URL:-https://huggingface.co/rhasspy/vosk-models/resolve/main/en/$VOSK.zip}"
 if [[ ! -d "$MODELS/$VOSK" ]]; then
-  echo "Downloading $VOSK (40 MB)"
-  curl -L --fail -o "$MODELS/$VOSK.zip" "https://alphacephei.com/vosk/models/$VOSK.zip"
+  echo "Downloading $VOSK (40 MB) from $VOSK_URL"
+  curl -L --fail -o "$MODELS/$VOSK.zip" "$VOSK_URL"
   (cd "$MODELS" && unzip -q "$VOSK.zip" && rm "$VOSK.zip")
 fi
 
