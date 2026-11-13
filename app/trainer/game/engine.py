@@ -15,6 +15,7 @@ from ..core.events import (
     GameState,
     IdleChanged,
     InputFrame,
+    InstructionWindow,
     ListenRequest,
     McuStatus,
     MisheardEvent,
@@ -97,6 +98,8 @@ class GameEngine(Service):
         self._menu_index = 0
         self._mcu_connected = False
         self._listening = False
+        self._instruction_open = False
+        self._instruction_misses = 0
 
         bus.subscribe(InputFrame, self.on_input)
         bus.subscribe(CommandEvent, self.on_command)
@@ -124,6 +127,13 @@ class GameEngine(Service):
         self.bus.publish(self.snapshot())
 
     # --- state changes -------------------------------------------------------
+
+    def _set_instruction_window(self, open_: bool) -> None:
+        """Tell the voice service whether the nurse waits for a treatment."""
+        if open_ != self._instruction_open:
+            self._instruction_open = open_
+            self._instruction_misses = 0
+            self.bus.publish(InstructionWindow(open=open_))
 
     def _set_listening(self, on: bool) -> None:
         if on != self._listening:
@@ -172,6 +182,7 @@ class GameEngine(Service):
         assert self.level is not None
         if self.quiz.abandon():
             self.bus.publish(QuestionClosed())
+        self._set_instruction_window(False)
         self.metrics.end()
         self.metrics.contacts = self.patient.contacts
         self.metrics.questions_correct = self.quiz.correct
@@ -337,6 +348,18 @@ class GameEngine(Service):
 
     def on_misheard(self, ev: MisheardEvent) -> None:
         self.last_command = "?"
+        if ev.reason == "no_instruction":
+            # A sentence without a treatment while the nurse waits: she asks
+            # again, and after two tries names what she can give.
+            if self.state is not GameState.PLAYING or not self.vitals.alarm_open():
+                return
+            self._instruction_misses += 1
+            if self._instruction_misses >= self.cfg.misses_before_help:
+                self._instruction_misses = 0
+                self.bus.publish(GameEvent(kind="you_can_order"))
+            else:
+                self.bus.publish(GameEvent(kind="pardon_doctor"))
+            return
         self._misses += 1
         if self._misses >= self.cfg.misses_before_help:
             self._misses = 0
@@ -368,7 +391,9 @@ class GameEngine(Service):
     # --- vitals monitor ----------------------------------------------------------
 
     def _update_vitals(self, dt: float) -> None:
-        for ev in self.vitals.update(dt, self.time_left, blocked=self.quiz.pending is not None):
+        events = self.vitals.update(dt, self.time_left, blocked=self.quiz.pending is not None)
+        self._set_instruction_window(self.vitals.alarm_open())
+        for ev in events:
             if ev.kind == "crisis":
                 self.patient.on_crisis()
                 self.say("Crisis: the team had to step in", 3)
@@ -376,6 +401,7 @@ class GameEngine(Service):
 
     def _treat(self, word: str) -> None:
         """An instruction to the nurse. The physiology decides what it does."""
+        self._instruction_misses = 0
         outcome = self.vitals.treat(word)
         if word == "adrenaline":
             self.patient.startle(self.vitals_cfg.pulse_jump_bpm)

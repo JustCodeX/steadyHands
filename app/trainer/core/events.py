@@ -96,7 +96,7 @@ class CommandEvent(Event):
 class MisheardEvent(Event):
     """Speech was detected but no command matched well enough."""
 
-    reason: str = "no_match"  # "no_match" | "low_confidence"
+    reason: str = "no_match"  # "no_match" | "low_confidence" | "no_instruction" (a sentence with no treatment during an alarm)
     speech_end_t: float | None = None
 
 
@@ -131,6 +131,14 @@ class QuestionAsked(Event):
     """Game -> voice: from now on, speech is the answer to this question."""
 
     question_id: str
+
+
+@dataclass(kw_only=True)
+class InstructionWindow(Event):
+    """Game -> voice: an alarm is open (or closed); the nurse waits for a treatment.
+    While it is open, sentences go to Needle and a sentence without a treatment gets "Pardon, doctor?"."""
+
+    open: bool
 
 
 @dataclass(kw_only=True)

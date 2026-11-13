@@ -27,6 +27,9 @@ from .voice.voice_service import (
     build_evaluator,
     build_interpreter,
     build_recognizer,
+    build_sentence_recognizer,
+    build_treatment_interpreter,
+    command_phrases,
 )
 
 log = logging.getLogger(__name__)
@@ -58,18 +61,23 @@ def build_app(cfg, *, mcu: bool, voice: bool, sound: bool, keyboard: bool, displ
     if sound:
         app.register(SoundService(bus, cfg.audio))
     if voice:
-        interpreter = build_interpreter(cfg.voice, cfg.commands)
+        sentence = build_sentence_recognizer(cfg.voice, cfg.treatments)
+        phrases = command_phrases(cfg.commands, cfg.treatments, sentence_path=sentence is not None)
+        interpreter = build_interpreter(cfg.voice, phrases)
         recognizer = build_recognizer(cfg.voice, interpreter.phrases())
         app.register(
             VoiceService(
                 bus,
                 cfg.voice,
-                cfg.commands,
+                phrases,
                 recognizer=recognizer,
                 interpreter=interpreter,
                 questions=questions,
                 answer_recognizer=build_answer_recognizer(cfg.voice, questions),
                 evaluator=build_evaluator(cfg.voice),
+                treatments=cfg.treatments,
+                sentence_recognizer=sentence,
+                treatment_interpreter=build_treatment_interpreter(cfg.voice, cfg.treatments) if sentence is not None else None,
             )
         )
     app.register(PowerManager(bus, cfg.system, cfg.game.deadzone_g))

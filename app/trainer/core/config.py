@@ -77,15 +77,13 @@ class GameConfig:
 @dataclass
 class VoiceConfig:
     enabled: bool = True
-    # "vosk" | "whistle" | "null". Whistle has no restricted vocabulary, so
-    # for commands it only makes sense together with interpreter = "needle".
+    # The older commands: "vosk" | "null". They stay on Vosk; Whistle and
+    # Needle serve only the treatments (below).
     recognizer: str = "vosk"
-    # Transcript -> command word. "keyword" is the phrase matcher. "needle"
-    # adds the tool-calling model for speech without a command phrase; it
-    # needs command_vocabulary = "open" (docs/needle-integration.md).
+    # Transcript -> command word: "keyword", the phrase matcher.
     interpreter: str = "keyword"
     # "restricted": the recogniser only knows the command phrases (robust).
-    # "open": free speech, which an interpreter like Needle needs to be useful.
+    # "open": its full vocabulary (for experiments; mishears more).
     command_vocabulary: str = "restricted"
     model_dir: str = str(APP_DIR / "models" / "vosk-model-small-en-us-0.15")
     sample_rate: int = 16000
@@ -104,7 +102,21 @@ class VoiceConfig:
     # "forceps") that the VAD needs vad_start_ms to react to would be lost.
     vad_preroll_ms: int = 250
     max_segment_s: float = 3.0
+    # Adaptive end: a segment longer than this is a sentence. It then ends
+    # after long_hangover_ms of silence and may last long_max_segment_s.
+    short_segment_s: float = 1.2
+    long_hangover_ms: int = 700
+    long_max_segment_s: float = 6.0
     confidence_threshold: float = 0.6
+    # --- the nurse's treatments (vitals monitor) ---
+    # Sentences for the treatments: "none" (the treatment phrases join the
+    # Vosk command grammar; no model needed), "whistle" (Cactus), or "vosk"
+    # (open vocabulary). The older commands stay on the Vosk grammar either way.
+    sentence_recognizer: str = "none"
+    # Sentence -> treatment: "keyword" (phrases) or "needle" (phrases first,
+    # then the Needle model, only while an alarm is open).
+    treatment_interpreter: str = "keyword"
+    sentence_confidence_threshold: float = 0.5
     # --- spoken quiz answers (whole sentences) ---
     # Spoken answer -> one of the question's options. "keyword" looks for the
     # options' phrases. "needle" adds the tool-calling model for answers that

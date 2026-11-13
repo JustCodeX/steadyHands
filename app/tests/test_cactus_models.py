@@ -25,7 +25,12 @@ from trainer.game.actions import MODEL_ACTIONS, ActionCatalog
 from trainer.quiz import KeywordEvaluator, QuestionBank
 from trainer.voice.command_matcher import CommandMatcher
 from trainer.voice.recognizer import EnsembleRecognizer, NullRecognizer
-from trainer.voice.voice_service import build_answer_recognizer, build_evaluator, build_interpreter, build_recognizer
+from trainer.voice.voice_service import (
+    build_answer_recognizer,
+    build_evaluator,
+    build_sentence_recognizer,
+    build_treatment_interpreter,
+)
 
 BANK = QuestionBank.load(QuizConfig().questions_file)
 
@@ -316,19 +321,21 @@ def test_whistle_needs_its_weights_and_16_khz(monkeypatch, weights, tmp_path):
 # --- selection by config ---------------------------------------------------------------
 
 
-def test_config_selects_needle_and_falls_back_without_it(monkeypatch, weights, tmp_path, caplog):
+def test_config_selects_needle_for_treatments_and_falls_back_without_it(monkeypatch, weights, tmp_path, caplog):
     use(monkeypatch, FakeCactus())
-    with_needle = VoiceConfig(interpreter="needle", evaluator="needle", command_vocabulary="open", needle_weights=str(weights))
-    assert isinstance(build_interpreter(with_needle, DEFAULT_COMMANDS), NeedleInterpreter)
+    with_needle = VoiceConfig(treatment_interpreter="needle", evaluator="needle", needle_weights=str(weights))
+    treatments = build_treatment_interpreter(with_needle, DEFAULT_TREATMENTS)
+    assert isinstance(treatments, NeedleInterpreter) and treatments.require_trigger
     assert isinstance(build_evaluator(with_needle), NeedleEvaluator)
-    missing = VoiceConfig(interpreter="needle", evaluator="needle", needle_weights=str(tmp_path / "missing.cact"))
+    missing = VoiceConfig(treatment_interpreter="needle", evaluator="needle", needle_weights=str(tmp_path / "missing.cact"))
     with caplog.at_level("ERROR"):
-        assert isinstance(build_interpreter(missing, DEFAULT_COMMANDS), CommandMatcher)
+        fallback = build_treatment_interpreter(missing, DEFAULT_TREATMENTS)
         assert type(build_evaluator(missing)) is KeywordEvaluator
+    assert isinstance(fallback, CommandMatcher) and fallback.interpret("give him oxygen").word == "oxygen"
     assert caplog.text.count("Needle unavailable") == 2
 
 
-def test_config_selects_whistle_for_answers_and_for_commands(monkeypatch, weights, tmp_path):
+def test_config_selects_whistle_for_answers_and_for_sentences(monkeypatch, weights, tmp_path):
     import trainer.voice.vosk_recognizer as vosk_module
 
     class FakeVosk(NullRecognizer):
@@ -345,10 +352,16 @@ def test_config_selects_whistle_for_answers_and_for_commands(monkeypatch, weight
     # Whistle missing: the phrase recogniser still works alone
     alone = build_answer_recognizer(VoiceConfig(answer_engine="whistle", whistle_weights=str(tmp_path / "x.cact")), BANK)
     assert isinstance(alone, FakeVosk)
-    assert isinstance(build_recognizer(VoiceConfig(recognizer="whistle", whistle_weights=str(weights)), ["clamp"]), WhistleRecognizer)
-    assert isinstance(build_recognizer(VoiceConfig(recognizer="whistle", whistle_weights=str(tmp_path / "x.cact")), ["clamp"]), NullRecognizer)
+    # sentences for the treatments
+    whistle = build_sentence_recognizer(VoiceConfig(sentence_recognizer="whistle", whistle_weights=str(weights)), DEFAULT_TREATMENTS)
+    assert isinstance(whistle, WhistleRecognizer) and "adrenaline" in whistle._keywords
+    assert build_sentence_recognizer(VoiceConfig(sentence_recognizer="whistle", whistle_weights=str(tmp_path / "x.cact")), DEFAULT_TREATMENTS) is None
+    assert build_sentence_recognizer(VoiceConfig(), DEFAULT_TREATMENTS) is None  # the default needs no model
+    assert isinstance(build_sentence_recognizer(VoiceConfig(sentence_recognizer="vosk"), DEFAULT_TREATMENTS), FakeVosk)
     with pytest.raises(ValueError):
         build_answer_recognizer(VoiceConfig(answer_engine="magic"), BANK)
+    with pytest.raises(ValueError):
+        build_sentence_recognizer(VoiceConfig(sentence_recognizer="magic"), DEFAULT_TREATMENTS)
 
 
 # --- the board check --------------------------------------------------------------

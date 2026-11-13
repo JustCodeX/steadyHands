@@ -1,6 +1,8 @@
 """Runs the speech pipeline in its own thread and publishes commands.
 
-mic -> SignalProcessor -> EnergyVad/Segmenter -> SpeechRecognizer -> CommandInterpreter
+mic -> SignalProcessor -> EnergyVad/Segmenter -> CommandUnderstanding
+                                                 (Vosk grammar for the older commands,
+                                                  Whistle + Needle for the nurse's treatments)
 
 While a quiz question is open (QuestionAsked .. QuestionClosed) a segment is
 an answer instead: it goes to the answer recogniser (whole sentences) and the
@@ -23,6 +25,7 @@ from ..core.events import (
     AnswerEvent,
     AsrDebugEvent,
     CommandEvent,
+    InstructionWindow,
     ListenRequest,
     MisheardEvent,
     PlaybackFinished,
@@ -40,6 +43,7 @@ from .command_matcher import CommandMatcher
 from .interpreter import CommandInterpreter
 from .recognizer import EnsembleRecognizer, NullRecognizer, SpeechRecognizer
 from .signal_processor import SignalProcessor
+from .understanding import CommandUnderstanding, Understood
 from .vad import EnergyVad, Segmenter, VoiceActivityDetector
 
 log = logging.getLogger(__name__)
@@ -63,11 +67,25 @@ class VoiceService(Service):
         questions: QuestionBank | None = None,
         answer_recognizer: SpeechRecognizer | None = None,
         evaluator: AnswerEvaluator | None = None,
+        treatments: dict[str, list[str]] | None = None,
+        sentence_recognizer: SpeechRecognizer | None = None,
+        treatment_interpreter: CommandInterpreter | None = None,
     ) -> None:
         super().__init__(bus)
         self.cfg = cfg
         self.interpreter = interpreter or CommandMatcher(commands)
         self.recognizer = recognizer or NullRecognizer()
+        self.understanding = CommandUnderstanding(
+            self.recognizer,
+            self.interpreter,
+            cfg.confidence_threshold,
+            treatments or {},
+            sentence_recognizer,
+            treatment_interpreter,
+            cfg.sentence_confidence_threshold,
+            cfg.short_segment_s,
+        )
+        self._expecting = False
         self.questions = questions or QuestionBank()
         self.answer_recognizer = answer_recognizer or NullRecognizer()
         self.evaluator = evaluator or KeywordEvaluator()
@@ -80,6 +98,9 @@ class VoiceService(Service):
             start_blocks=max(1, round(cfg.vad_start_ms / cfg.block_ms)),
             hangover_blocks=max(1, round(cfg.vad_hangover_ms / cfg.block_ms)),
             max_blocks=int(cfg.max_segment_s * blocks_per_s),
+            long_after_blocks=int(cfg.short_segment_s * blocks_per_s),
+            long_hangover_blocks=max(1, round(cfg.long_hangover_ms / cfg.block_ms)),
+            long_max_blocks=int(cfg.long_max_segment_s * blocks_per_s),
         )
         # Answers are sentences: allow pauses in them, and more length.
         self.answer_segmenter = Segmenter(
@@ -100,6 +121,7 @@ class VoiceService(Service):
         bus.subscribe(ListenRequest, self._on_listen)
         bus.subscribe(QuestionAsked, self._on_question)
         bus.subscribe(QuestionClosed, lambda e: self._set_question(None))
+        bus.subscribe(InstructionWindow, self._on_instruction_window)
         bus.subscribe(PlaybackStarted, lambda e: self._set_speaking(True))
         bus.subscribe(PlaybackFinished, lambda e: self._set_speaking(False))
 
@@ -116,9 +138,8 @@ class VoiceService(Service):
         if self._thread is not None:
             self._thread.join(timeout=2.0)
         self._safe_audio_stop()
-        self.recognizer.unload()
+        self.understanding.unload()
         self.answer_recognizer.unload()
-        self.interpreter.unload()
         self.evaluator.unload()
 
     # --- control -------------------------------------------------------------
@@ -133,6 +154,14 @@ class VoiceService(Service):
         if question is None:
             log.warning("unknown question id %s", ev.question_id)
         self._set_question(question)
+
+    def _on_instruction_window(self, ev: InstructionWindow) -> None:
+        with self._lock:
+            self._expecting = ev.open
+
+    def _expecting_instruction(self) -> bool:
+        with self._lock:
+            return self._expecting
 
     def _set_question(self, question: Question | None) -> None:
         with self._lock:
@@ -189,7 +218,7 @@ class VoiceService(Service):
                     self.vad.reset()
                     self.segmenter.reset()
                     self.answer_segmenter.reset()
-                    self.recognizer.reset()
+                    self.understanding.reset()
                     self.answer_recognizer.reset()
                     self._preroll.clear()
                     in_segment = False
@@ -204,7 +233,7 @@ class VoiceService(Service):
                 self._safe_audio_stop()
                 if in_segment:
                     in_segment = False
-                    self.recognizer.reset()
+                    self.understanding.reset()
                     self.answer_recognizer.reset()
             if not self.audio.running:
                 time.sleep(0.05)
@@ -226,7 +255,7 @@ class VoiceService(Service):
                         self.evaluator.prepare(now_open)
                 question = now_open
             segmenter = self.answer_segmenter if question is not None else self.segmenter
-            recognizer = self.answer_recognizer if question is not None else self.recognizer
+            recognizer = self.answer_recognizer if question is not None else self.understanding
             phase = segmenter.update(speech)
             pcm = self.dsp.to_int16(x)
             if phase == "start":
@@ -252,28 +281,26 @@ class VoiceService(Service):
                 if question is not None:
                     self.handle_answer(question, speech_end_t)
                 else:
-                    self.handle_segment(speech_end_t)
+                    self.handle_segment(speech_end_t, segmenter.last_length * self.cfg.block_ms / 1000.0)
                 self._publish_state(processing=False)
 
-    def handle_segment(self, speech_end_t: float) -> None:
-        """Finish recognition for the segment and publish the outcome."""
-        transcript = self.recognizer.finish()
-        match = self.interpreter.interpret(transcript.text)
-        if match is None:
+    def handle_segment(self, speech_end_t: float, duration_s: float = 0.0) -> None:
+        """Decide the segment and publish the outcome (never the words)."""
+        u: Understood = self.understanding.finish(duration_s, self._expecting_instruction())
+        if u.kind in ("command", "treatment"):
+            log.info("%s %s (%.2f)", u.kind, u.word, u.confidence)
+            self.bus.publish(CommandEvent(word=u.word, confidence=u.confidence, speech_end_t=speech_end_t))
+            self._debug_asr(u.text, u.confidence, u.kind, u.word)
+        elif u.kind == "unclear":
+            # "Pardon?" for a command heard with low confidence, and "Pardon, doctor?"
+            # for a sentence without a treatment while the nurse waits for one.
+            self.bus.publish(MisheardEvent(reason=u.reason, speech_end_t=speech_end_t))
+            self._debug_asr(u.text, u.confidence, u.reason, u.word)
+        else:
             # Noise, other people talking, or words that resemble no command:
             # ignored silently, so the game never interrupts a conversation.
-            # "Pardon?" is reserved for a command heard with low confidence.
-            log.debug("segment without a command (text length %d)", len(transcript.text))
-            self._debug_asr(transcript.text, transcript.confidence, "no_match" if transcript.text else "empty")
-            return
-        confidence = min(match.score, transcript.confidence if transcript.confidence > 0 else match.score)
-        if confidence < self.cfg.confidence_threshold:
-            self.bus.publish(MisheardEvent(reason="low_confidence", speech_end_t=speech_end_t))
-            self._debug_asr(transcript.text, confidence, "low_confidence", match.word)
-            return
-        log.info("command %s (%.2f)", match.word, confidence)
-        self.bus.publish(CommandEvent(word=match.word, confidence=confidence, speech_end_t=speech_end_t))
-        self._debug_asr(transcript.text, confidence, "command", match.word)
+            log.debug("segment without a command (text length %d)", len(u.text))
+            self._debug_asr(u.text, u.confidence, "no_match" if u.text else "empty")
 
     def handle_answer(self, question: Question, speech_end_t: float) -> None:
         """Finish recognition of a spoken answer and publish the verdict only."""
@@ -327,20 +354,59 @@ class VoiceService(Service):
 
 
 def build_interpreter(cfg: VoiceConfig, commands: dict[str, list[str]]) -> CommandInterpreter:
-    """Pick the transcript -> command step from the config."""
+    """The transcript -> command step for the older commands: the phrase matcher.
+    (Needle serves the treatments only: build_treatment_interpreter.)"""
     if cfg.interpreter == "keyword":
         return CommandMatcher(commands)
-    if cfg.interpreter == "needle":
+    raise ValueError(f"unknown interpreter: {cfg.interpreter} (Needle decides treatments only: voice.treatment_interpreter)")
+
+
+def build_sentence_recognizer(cfg: VoiceConfig, treatments: dict[str, list[str]]) -> SpeechRecognizer | None:
+    """The recogniser that hears sentences for the treatments, or None (then the
+    treatment phrases belong in the command grammar, see command_phrases)."""
+    if cfg.sentence_recognizer == "none" or cfg.recognizer == "null":
+        return None
+    if cfg.sentence_recognizer == "whistle":
+        from ..game.actions import SYMPTOM_WORDS
+
+        try:
+            return _whistle(cfg, sorted({p for phrases in treatments.values() for p in phrases} | set(SYMPTOM_WORDS)))
+        except Exception as exc:
+            log.error("Whistle unavailable (%s); treatments by their names through the command grammar", exc)
+            return None
+    if cfg.sentence_recognizer == "vosk":
+        try:
+            from .vosk_recognizer import VoskRecognizer
+
+            return VoskRecognizer(cfg.model_dir, None, cfg.sample_rate)
+        except Exception as exc:
+            log.error("Vosk (open vocabulary) unavailable (%s); treatments through the command grammar", exc)
+            return None
+    raise ValueError(f"unknown sentence_recognizer: {cfg.sentence_recognizer}")
+
+
+def build_treatment_interpreter(cfg: VoiceConfig, treatments: dict[str, list[str]]) -> CommandInterpreter:
+    """Sentence -> treatment: the phrases, plus Needle if configured."""
+    if cfg.treatment_interpreter == "keyword":
+        return CommandMatcher(treatments)
+    if cfg.treatment_interpreter == "needle":
         try:
             from ..cactus_models.needle_interpreter import NeedleInterpreter
 
-            if cfg.command_vocabulary != "open" and cfg.recognizer == "vosk":
-                log.warning("voice.interpreter = needle only sees the command phrases unless command_vocabulary = open")
-            return NeedleInterpreter(commands, cfg.needle_weights, min_confidence=cfg.needle_min_confidence)
+            return NeedleInterpreter(
+                treatments, cfg.needle_weights, min_confidence=cfg.needle_min_confidence, require_trigger=cfg.needle_require_trigger
+            )
         except Exception as exc:
-            log.error("Needle unavailable (%s); using the keyword matcher", exc)
-            return CommandMatcher(commands)
-    raise ValueError(f"unknown interpreter: {cfg.interpreter}")
+            log.error("Needle unavailable (%s); treatments by their names only", exc)
+            return CommandMatcher(treatments)
+    raise ValueError(f"unknown treatment_interpreter: {cfg.treatment_interpreter}")
+
+
+def command_phrases(commands: dict[str, list[str]], treatments: dict[str, list[str]], sentence_path: bool) -> dict[str, list[str]]:
+    """What the Vosk grammar listens for. With a sentence path the treatments
+    are not in it, so neither path fires the other's words; without one they
+    are, so the treatments still work by voice without any model (T3)."""
+    return dict(commands) if sentence_path else {**commands, **treatments}
 
 
 def build_evaluator(cfg: VoiceConfig) -> AnswerEvaluator:
@@ -401,7 +467,8 @@ def build_answer_recognizer(cfg: VoiceConfig, questions: QuestionBank) -> Speech
 
 
 def build_recognizer(cfg: VoiceConfig, phrases: list[str]) -> SpeechRecognizer:
-    """Pick the engine from the config; fall back to NullRecognizer with a clear log line.
+    """The recogniser for the older commands: Vosk. Falls back to
+    NullRecognizer with a clear log line.
 
     `phrases` restricts the vocabulary unless `voice.command_vocabulary` is "open"."""
     if cfg.command_vocabulary not in ("restricted", "open"):
@@ -415,12 +482,6 @@ def build_recognizer(cfg: VoiceConfig, phrases: list[str]) -> SpeechRecognizer:
         except Exception as exc:
             log.error("Vosk unavailable (%s); voice commands disabled, keyboard still works", exc)
             return NullRecognizer()
-    if cfg.recognizer == "whistle":
-        try:
-            return _whistle(cfg, phrases)
-        except Exception as exc:
-            log.error("Whistle unavailable (%s); voice commands disabled, keyboard still works", exc)
-            return NullRecognizer()
     if cfg.recognizer == "null":
         return NullRecognizer()
-    raise ValueError(f"unknown recognizer: {cfg.recognizer}")
+    raise ValueError(f"unknown recognizer: {cfg.recognizer} (the older commands stay on Vosk)")

@@ -76,6 +76,16 @@ TREATMENT_ACTIONS: tuple[GameAction, ...] = (
     ),
 )
 
+# Words Whistle is biased towards when it hears a sentence for the nurse (its
+# `keywords`): the words of a patient in trouble. Without them Whistle wrote
+# "saps" for "sats" and "waiting up" for "waking up" (14 Nov 2026, synthetic
+# voices), and Needle never saw a trigger word.
+SYMPTOM_WORDS: tuple[str, ...] = (
+    "sats", "saturation", "breathe", "breathing", "blue", "air", "hypoxic",
+    "waking", "awake", "moving", "pain", "sedation", "deeper", "BIS",
+    "pressure", "shock", "pulse", "systolic", "crashing", "hypotensive",
+)
+
 SELECT_INSTRUMENT = GameAction(
     "select_instrument",
     "Hand the surgeon an instrument. " + INSTRUMENT_HELP,

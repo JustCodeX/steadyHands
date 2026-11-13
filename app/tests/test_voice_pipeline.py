@@ -269,13 +269,13 @@ def test_usb_sound_card_detection():
     assert usb_sound_card_present(None) is None  # not Linux: unknown, so no warning
 
 
-def test_needle_interpreter_falls_back_to_the_keyword_matcher(caplog):
-    with caplog.at_level("WARNING"):
-        interpreter = build_interpreter(VoiceConfig(interpreter="needle"), DEFAULT_COMMANDS)
-    assert interpreter.interpret("clamp").word == "clamp"
-    assert "needle" in caplog.text
+def test_the_older_commands_stay_on_the_keyword_matcher():
+    assert build_interpreter(VoiceConfig(), DEFAULT_COMMANDS).interpret("clamp").word == "clamp"
+    for wrong in ("needle", "magic"):  # Needle decides treatments only
+        with pytest.raises(ValueError):
+            build_interpreter(VoiceConfig(interpreter=wrong), DEFAULT_COMMANDS)
     with pytest.raises(ValueError):
-        build_interpreter(VoiceConfig(interpreter="magic"), DEFAULT_COMMANDS)
+        build_recognizer(VoiceConfig(recognizer="whistle"), ["clamp"])
 
 
 def test_command_vocabulary_decides_whether_the_recogniser_is_restricted(monkeypatch):
