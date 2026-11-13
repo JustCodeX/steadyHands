@@ -20,7 +20,7 @@ You guide a surgical instrument through a patient map on a 7-inch screen by tilt
 - **Display:** Elecrow 7" IPS over HDMI, through a USB-C hub
 - **Modulinos:** Movement (tilt), Buttons, Knob, optionally Distance, chained over Qwiic
 - **Audio:** headset
-- **Signals:** the wall buzz plays in the game, through the headset. There is no horn and no signal LED.
+- **Signals:** the wall buzz plays in the game, through the headset
 
 ## Hardware wiring
 

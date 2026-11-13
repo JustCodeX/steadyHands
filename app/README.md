@@ -50,7 +50,7 @@ Keyboard: arrows tilt (Shift = slow), Space = A, M = B, C = C, +/- turn the knob
 
 Settings: copy the defaults from `trainer/core/config.py` into a TOML file and pass `--config file.toml` (or set `STEADYHANDS_CONFIG`). Typical overrides: `voice.input_device = ""` (default input instead of the USB headset), `audio.output_device`, `game.speed_px_per_s`, `voice.confidence_threshold`, `mcu.tool_leds = true` (show the active tool on the Modulino Buttons LEDs).
 
-Wall contact plays a generated buzz through the audio output (`trainer/audio/sound_service.py`, `make_buzz_bytes`). There is no horn or signal LED on the MCU.
+Wall contact plays a generated buzz through the audio output (`trainer/audio/sound_service.py`, `make_buzz_bytes`).
 
 ## Tests
 

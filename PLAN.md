@@ -37,7 +37,7 @@ A working prototype of a surgeon trainer: you guide a surgical instrument throug
 | ✅ Code style | Object-oriented and modular: every feature is a class behind an interface (see [Code design](#code-design)) |
 | ❓ D2 Speech-to-text | Timon decides (model deployment and ASR choice are his area). The code ships `VoskRecognizer` (Vosk small English, vocabulary restricted to our commands: aarch64 wheel, 40 MB model) as the working default; any other engine is a further `SpeechRecognizer` subclass selected in the config (see [Speech pipeline](#speech-pipeline)) |
 | ✅ Purpose | Working prototype of a surgeon trainer, inspired by Dr. Bibber |
-| ✅ Wall feedback | A wall touch plays a buzz in the game (`SoundService`), then the patient's "Ouch!". There is no horn and no signal LED: both were removed from the design, the firmware, and the wiring. |
+| ✅ Wall feedback | A wall touch plays a buzz in the game (`SoundService`), then the patient's "Ouch!". |
 | ❓ D3 Name | "Steady Hands" is a placeholder |
 | ❓ D4 Audio for the audience | Headset audio only reaches the person wearing it. Does the display have an audio jack, or can we get a USB speaker? |
 | ❓ D5 License for our code | Must fit the licenses of the models we use (see [Licenses](#licenses)) |

@@ -60,7 +60,7 @@ def test_mcu_gets_no_command_for_game_events_by_default(monkeypatch):
 def test_tool_leds_show_the_tool_and_a_wall_contact_sends_nothing(monkeypatch):
     link, sent = _captured_notifies(monkeypatch, McuConfig(tool_leds=True))
     link._on_game_event(GameEvent(kind="hit"))
-    assert sent == []  # the MCU has no horn or alarm command any more
+    assert sent == []  # a wall contact sends nothing to the MCU
     link._on_game_event(GameEvent(kind="tool_changed", detail="swab"))
     link._on_game_event(GameEvent(kind="win"))
     assert sent == [("leds", 0b010), ("leds", 0)]
