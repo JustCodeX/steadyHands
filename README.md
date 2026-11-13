@@ -1,8 +1,8 @@
 # Steady Hands (working title)
 
-A voice-controlled operation game on the Arduino UNO Q, built by team PromptPimps at the Speech-to-Speech hackathon (13–14 November 2026, Nürnberg).
+A working prototype of a voice-controlled surgeon trainer on the Arduino UNO Q, inspired by the steady-hand game Dr. Bibber. Built by team PromptPimps at the Speech-to-Speech hackathon (13–14 November 2026, Nürnberg).
 
-You guide a surgical instrument through a patient map on a 7-inch screen by tilting the instrument in your hand. You call for tools by voice ("forceps!", "clamp!"), and touching a wall sounds the horn. In co-op mode, a second player runs the operating room by voice, so the game is won by talking to each other. Speech recognition, game, and speech output run entirely offline on the board, and no audio is stored.
+You guide a surgical instrument through a patient map on a 7-inch screen by tilting the instrument in your hand. You call for instruments by voice ("forceps!", "clamp!"), as in a real operating room, and touching a wall sounds the horn. After each round, the trainer shows your time, wall contacts, and steadiness. In co-op mode, the assistant repeats every call back before the instrument is handed over, the way operating-room teams confirm instructions. Speech recognition, game logic, and speech output run entirely offline on the board, and no audio is stored.
 
 ## Documents
 
@@ -22,7 +22,7 @@ You guide a surgical instrument through a patient map on a 7-inch screen by tilt
 
 ## Status
 
-Planning (13 November). Decided: English, one-player mode with optional co-op, mic listening during play. Still open: toolchain (D1) and speech-to-text engine (D2); see [PLAN.md](PLAN.md#decisions).
+Planning (13 November). Decided: a surgeon-training prototype for medical students; English; one-player mode with optional co-op; mic listening during play. Still open: toolchain (D1) and speech-to-text engine (D2); see [PLAN.md](PLAN.md#decisions).
 
 The MCU toolchain works: the starter sketch builds and flashes with PlatformIO on the board.
 
