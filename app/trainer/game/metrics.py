@@ -23,6 +23,9 @@ class TrainingMetrics:
         self.steady_uses = 0
         self.questions_correct = 0
         self.questions_wrong = 0
+        self.treatments_correct = 0
+        self.treatments_wrong = 0
+        self.crises = 0
         self._jitter_sq_sum = 0.0
         self._jitter_n = 0
         self._last_tilt: tuple[float, float] | None = None
@@ -75,4 +78,7 @@ class TrainingMetrics:
             steady_uses=self.steady_uses,
             questions_correct=self.questions_correct,
             questions_wrong=self.questions_wrong,
+            treatments_correct=self.treatments_correct,
+            treatments_wrong=self.treatments_wrong,
+            crises=self.crises,
         )

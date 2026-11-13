@@ -34,6 +34,8 @@ class Level:
     dark_zones: list[tuple[int, int, int, int]] = field(default_factory=list)
     quiz_count: int | None = None  # questions asked in this level; None = the config's default
     quiz_topics: list[str] = field(default_factory=list)  # empty = any topic
+    vitals_episodes: int = 0  # how many times a vital sign goes wrong in this level
+    vitals_kinds: list[str] = field(default_factory=list)  # which ones ("spo2", "bis", "bp"); empty = any
 
     @classmethod
     def load(cls, directory: str | Path, mask: CollisionMap | None = None) -> "Level":
@@ -53,6 +55,7 @@ class Level:
         if mask is None:
             mask = CollisionMap.from_png(directory / "mask.png")
         quiz = data.get("quiz", {})
+        vitals = data.get("vitals", {})
         level = cls(
             name=data.get("name", directory.name),
             directory=directory,
@@ -63,6 +66,8 @@ class Level:
             dark_zones=[tuple(int(v) for v in z) for z in data.get("dark", [])],
             quiz_count=int(quiz["count"]) if "count" in quiz else None,
             quiz_topics=list(quiz.get("topics", [])),
+            vitals_episodes=int(vitals.get("episodes", 0)),
+            vitals_kinds=list(vitals.get("kinds", [])),
         )
         level.reset()
         return level

@@ -48,7 +48,7 @@ def build_app(cfg, *, mcu: bool, voice: bool, sound: bool, keyboard: bool, displ
     app = App(bus)
     levels = LevelCatalog(cfg.levels_dir)
     questions = load_questions(cfg)
-    app.register(GameEngine(bus, cfg.game, levels, cfg.display.width, cfg.display.height, cfg.quiz, questions))
+    app.register(GameEngine(bus, cfg.game, levels, cfg.display.width, cfg.display.height, cfg.quiz, questions, cfg.vitals))
     if display:
         app.register(Renderer(bus, cfg.display))
     if keyboard:

@@ -174,6 +174,17 @@ class RoundResult(Event):
     steady_uses: int
     questions_correct: int = 0
     questions_wrong: int = 0
+    treatments_correct: int = 0  # instructions to the nurse that fixed the value in trouble
+    treatments_wrong: int = 0  # wrong or unneeded ones
+    crises: int = 0  # a vital stayed critical and cost a life
+
+
+@dataclass(kw_only=True)
+class Subtitle(Event):
+    """A spoken line as text, for the screen (the game's own lines, never what a player said)."""
+
+    speaker: str  # "nurse" | "patient"
+    text: str
 
 
 @dataclass(kw_only=True)
@@ -221,6 +232,18 @@ class TargetView:
 
 
 @dataclass(kw_only=True)
+class VitalView:
+    """One tile of the vitals monitor."""
+
+    key: str  # "spo2" | "bis" | "bp"
+    label: str
+    value: int
+    unit: str
+    status: str  # "normal" | "alarm" | "critical"
+    trend: int  # -1, 0, +1
+
+
+@dataclass(kw_only=True)
 class GameSnapshot(Event):
     """Everything the renderer needs to draw one frame, published every tick."""
 
@@ -258,3 +281,6 @@ class GameSnapshot(Event):
     stress: int = 0  # 0..max_stress, raised by wrong answers
     nurse_selection: str = ""  # co-op: the instrument the assistant has ready
     max_stress: int = 3
+    crises: int = 0  # lives lost on the vitals monitor; lives left = max_contacts - contacts - crises
+    vitals: list[VitalView] = field(default_factory=list)  # empty: this level has no vitals monitor
+    vitals_alarm: bool = False  # a value waits for an instruction

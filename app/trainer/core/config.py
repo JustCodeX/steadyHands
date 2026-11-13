@@ -132,9 +132,13 @@ class VoiceConfig:
 
 @dataclass
 class QuizConfig:
-    """Questions the patient asks during a round, and what a wrong answer costs."""
+    """Questions the patient asks during a round, and what a wrong answer costs.
 
-    enabled: bool = True
+    Off by default since 14 Nov 2026: the vitals monitor replaced it in the
+    levels. The code and the levels' quiz blocks stay; `enabled = true` in a
+    TOML file brings it back."""
+
+    enabled: bool = False
     questions_file: str = str(APP_DIR / "assets" / "questions.json")
     questions_per_round: int = 2  # a level can override this (level.json, "quiz")
     first_after_s: float = 8.0
@@ -147,6 +151,21 @@ class QuizConfig:
     max_stress: int = 3
     stress_speed_step: float = 0.15  # the instrument moves this much faster per stress level
     stress_bleed_step: float = 0.25  # bleeding timers run this much faster per stress level
+
+
+@dataclass
+class VitalsConfig:
+    """The vitals monitor (game/vitals.py). A level says how many episodes it has."""
+
+    enabled: bool = True
+    first_after_s: float = 8.0  # the first episode starts this long into the round
+    interval_s: tuple[float, float] = (8.0, 16.0)  # from one episode's end to the next one's start
+    drift_to_critical_s: float = 18.0  # a drifting value goes from normal to critical in about this time
+    reminder_s: float = 6.0  # the nurse repeats the alarm with the value after this long without the right instruction
+    crisis_after_s: float = 4.0  # critical for this long costs a life
+    recover_s: float = 3.0  # after the right instruction the value is back to normal in this time
+    min_time_left_s: float = 15.0  # no new episode this close to the end of the round
+    pulse_jump_bpm: int = 15  # adrenaline makes the pulse jump
 
 
 @dataclass
@@ -187,6 +206,7 @@ class Config:
     display: DisplayConfig = field(default_factory=DisplayConfig)
     game: GameConfig = field(default_factory=GameConfig)
     quiz: QuizConfig = field(default_factory=QuizConfig)
+    vitals: VitalsConfig = field(default_factory=VitalsConfig)
     voice: VoiceConfig = field(default_factory=VoiceConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
     mcu: McuConfig = field(default_factory=McuConfig)

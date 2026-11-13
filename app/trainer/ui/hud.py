@@ -2,7 +2,8 @@
 
 Left to right: the patient's face and lives, the clock, the instrument tray
 (the knob picks from it), the list of things still to treat, and the mic.
-An open quiz question is shown along the bottom edge, like a subtitle.
+Along the bottom edge: the vitals console (VitalsConsole) with the nurse's
+subtitle, or, in a level without the monitor, an open quiz question.
 """
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ from .art.instrument_art import InstrumentArt
 from .art.patient_art import PatientArt
 from .art.target_art import TargetArt
 from .fonts import Fonts
+from .vitals_console import VitalsConsole
 
 LIFE = (244, 92, 110)
 
@@ -37,6 +39,7 @@ class Hud:
         self._dim: dict[str, pygame.Surface] = {}
         self._task_icons: dict[tuple[str, str], pygame.Surface] = {}
         self._panel = self._make_panel()
+        self.console = VitalsConsole(width, fonts)
 
     def _make_panel(self) -> pygame.Surface:
         h = theme.HUD_HEIGHT
@@ -53,16 +56,20 @@ class Hud:
         self._tray(surface, snap, t)
         self._tasks(surface, snap)
         self._status(surface, snap, voice, t)
-        self._question(surface, snap)
+        if self.console.wanted(snap, t):
+            self.console.draw(surface, snap, t, self._wrap)
+        else:
+            self._question(surface, snap)
 
     # --- parts -----------------------------------------------------------------
 
     def _patient(self, surface: pygame.Surface, snap: GameSnapshot, t: float, shaken: bool) -> None:
-        mood = self.patient.mood_for(snap.contacts, snap.max_contacts)
+        lost = snap.contacts + snap.crises  # a crisis on the monitor costs a life like a wall contact
+        mood = self.patient.mood_for(lost, snap.max_contacts)
         dx = int(3 * math.sin(t * 60)) if shaken else 0
         surface.blit(self.patient.face(mood, 50), (5 + dx, 3))
         for i in range(snap.max_contacts):
-            alive = i >= snap.contacts
+            alive = i >= lost
             self._heart(surface, 74 + i * 25, 18, 10, LIFE if alive else theme.PANEL_LINE)
         rate = snap.heart_rate
         colour = theme.GOOD if rate < 100 else theme.WARN if rate < 130 else theme.BAD

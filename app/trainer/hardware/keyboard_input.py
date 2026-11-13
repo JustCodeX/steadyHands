@@ -1,7 +1,8 @@
 """Keyboard as an input source for development and as a demo fallback.
 
 Arrow keys tilt, Space is button A, M is B, C is C, +/- turn the knob, Enter presses it.
-Number keys 1-4 call tools; letters send the other voice commands as if heard.
+Number keys 1-4 call tools, 5-7 give the nurse's treatments (oxygen,
+anaesthesia, adrenaline); letters send the other voice commands as if heard.
 Y and U answer the open quiz question right and wrong.
 """
 from __future__ import annotations
@@ -14,6 +15,9 @@ KEY_COMMANDS = {
     "2": "swab",
     "3": "clamp",
     "4": "scalpel",
+    "5": "oxygen",
+    "6": "anaesthesia",
+    "7": "adrenaline",
     "l": "light",
     "s": "steady",
     "x": "cancel",

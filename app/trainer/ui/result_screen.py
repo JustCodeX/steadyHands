@@ -69,6 +69,10 @@ class ResultScreen:
             rows.insert(3, ("Instruments called by voice", str(result.calls_correct)))
         if result.steady_uses:
             rows.append(("Precision help (steady)", str(result.steady_uses)))
+        given = result.treatments_correct + result.treatments_wrong
+        if given or result.crises:
+            rows.insert(2, ("Instructions right", f"{result.treatments_correct} / {given}"))
+            rows.insert(3, ("Crises", str(result.crises)))
         asked = result.questions_correct + result.questions_wrong
         if asked:
             rows.insert(2, ("Questions answered right", f"{result.questions_correct} / {asked}"))

@@ -8,16 +8,17 @@ import time
 from collections import deque
 
 from ..core.config import AudioConfig, TOOL_WORDS
-from ..core.events import GameEvent, PlaybackFinished, PlaybackStarted, RoundResult
+from ..core.events import GameEvent, PlaybackFinished, PlaybackStarted, RoundResult, Subtitle
 from ..core.service import Service
 from ..voice.audio_input import read_sound_cards, usb_sound_card_present
 from .clip_library import ClipLibrary
+from .lines import line_text
 from .phrase_builder import PhraseBuilder
 
 log = logging.getLogger(__name__)
 
 # Lines that interrupt whatever is playing.
-URGENT = {"hit", "bleed_timeout", "win", "lose", "pardon"}
+URGENT = {"hit", "bleed_timeout", "win", "lose", "pardon", "vital_alarm", "vital_reminder", "vital_crisis"}
 # Lines the result sentence makes redundant.
 QUIET_KINDS = {"menu", "paused", "resumed", "round_started"}
 # Game events that also get the buzz.
@@ -149,6 +150,10 @@ class SoundService(Service):
             return
         if ev.kind == "hit":
             self._variant += 1
+        nurse = self.phrases.nurse(ev.kind, ev.detail)
+        if nurse:
+            # headset audio reaches only the wearer (open point D4): the room reads along
+            self.bus.publish(Subtitle(speaker="nurse", text=line_text(nurse)))
         ids = self.phrases.for_event(ev.kind, ev.detail, self._variant)
         if ev.kind in BUZZ_KINDS and ids:
             ids = [SFX_BUZZ] + ids

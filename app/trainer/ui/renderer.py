@@ -21,6 +21,7 @@ from ..core.events import (
     IdleChanged,
     KeyEvent,
     QuitRequest,
+    Subtitle,
     VoiceState,
     VoiceStateChanged,
 )
@@ -67,6 +68,7 @@ class Renderer(Service):
         bus.subscribe(VoiceStateChanged, self._on_voice)
         bus.subscribe(IdleChanged, self._on_idle)
         bus.subscribe(AsrDebugEvent, self._on_asr_debug)
+        bus.subscribe(Subtitle, self._on_subtitle)
 
     # --- lifecycle -----------------------------------------------------------
 
@@ -122,6 +124,10 @@ class Renderer(Service):
 
     def _on_voice(self, ev: VoiceStateChanged) -> None:
         self.voice = ev.state
+
+    def _on_subtitle(self, ev: Subtitle) -> None:
+        if self.hud is not None:
+            self.hud.console.show(ev.text, time.monotonic())
 
     def _on_idle(self, ev: IdleChanged) -> None:
         self.idle = ev.idle

@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import logging
 import math
+import random
 import time
 
-from ..core.config import GameConfig, QuizConfig, TOOL_WORDS
+from ..core.config import TOOL_WORDS, TREATMENT_WORDS, GameConfig, QuizConfig, VitalsConfig
 from ..core.events import (
     AnswerEvent,
     CommandEvent,
@@ -23,6 +24,7 @@ from ..core.events import (
     QuestionClosed,
     RoundResult,
     TargetView,
+    VitalView,
 )
 from ..quiz.question import QuestionBank
 from ..core.service import Service
@@ -33,6 +35,7 @@ from .modes import CoopMode, GameMode, SoloMode
 from .patient import Patient
 from .quiz_director import QuizDirector, QuizOutcome, QuizStep
 from .stress import Stress
+from .vitals import SPECS, TreatmentResult, VitalsMonitor
 
 log = logging.getLogger(__name__)
 
@@ -49,12 +52,16 @@ class GameEngine(Service):
         height: int = 600,
         quiz_cfg: QuizConfig | None = None,
         questions: QuestionBank | None = None,
+        vitals_cfg: VitalsConfig | None = None,
+        rng: random.Random | None = None,
     ) -> None:
         super().__init__(bus)
         self.cfg = cfg
         self.quiz_cfg = quiz_cfg or QuizConfig()
         self.quiz = QuizDirector(self.quiz_cfg, questions)  # without questions it never asks
         self.stress = Stress(self.quiz_cfg)
+        self.vitals_cfg = vitals_cfg or VitalsConfig()
+        self.vitals = VitalsMonitor(self.vitals_cfg, rng)
         self._patient_speaking = False
         self.levels = levels
         self.width = width
@@ -148,6 +155,7 @@ class GameEngine(Service):
             self.bus.publish(QuestionClosed())
         count = self.level.quiz_count if self.level.quiz_count is not None else self.quiz_cfg.questions_per_round
         self.quiz.reset(count, self.level.quiz_topics)
+        self.vitals.reset(self.level.vitals_episodes, self.level.vitals_kinds)
         self.tool = instruments.make("forceps")
         self.previous_tool = None
         self.time_left = self.level.time_limit_s
@@ -168,6 +176,9 @@ class GameEngine(Service):
         self.metrics.contacts = self.patient.contacts
         self.metrics.questions_correct = self.quiz.correct
         self.metrics.questions_wrong = self.quiz.wrong
+        self.metrics.treatments_correct = self.vitals.correct
+        self.metrics.treatments_wrong = self.vitals.wrong
+        self.metrics.crises = self.patient.crises
         self._result = self.metrics.result(self.level.name, won)
         self._result_t = time.monotonic()
         self.state = GameState.RESULT
@@ -304,7 +315,9 @@ class GameEngine(Service):
         if self.state is not GameState.PLAYING:
             return
 
-        if word in TOOL_WORDS:
+        if word in TREATMENT_WORDS:
+            self._treat(word)
+        elif word in TOOL_WORDS:
             if self.mode.on_tool_call(word, now):
                 self._set_tool(word, by_voice=True)
             else:
@@ -333,6 +346,8 @@ class GameEngine(Service):
 
     def available_commands(self) -> list[str]:
         if self.state is GameState.PLAYING:
+            if self.vitals.alarm_open():  # the nurse waits for an instruction
+                return list(TREATMENT_WORDS)
             needed = {t.needs for t in self.level.remaining()} if self.level else set()
             tools = [w for w in TOOL_WORDS if w in needed] or ["forceps"]
             return tools + ["steady", "cancel", "pause"]
@@ -350,12 +365,42 @@ class GameEngine(Service):
             self.metrics.calls_correct += 1
         self.bus.publish(GameEvent(kind="tool_changed", detail=word))
 
+    # --- vitals monitor ----------------------------------------------------------
+
+    def _update_vitals(self, dt: float) -> None:
+        for ev in self.vitals.update(dt, self.time_left, blocked=self.quiz.pending is not None):
+            if ev.kind == "crisis":
+                self.patient.on_crisis()
+                self.say("Crisis: the team had to step in", 3)
+            self.bus.publish(GameEvent(kind=f"vital_{ev.kind}", detail=f"{ev.vital}:{ev.value}"))
+
+    def _treat(self, word: str) -> None:
+        """An instruction to the nurse. The physiology decides what it does."""
+        outcome = self.vitals.treat(word)
+        if word == "adrenaline":
+            self.patient.startle(self.vitals_cfg.pulse_jump_bpm)
+        if outcome.result is TreatmentResult.WRONG:
+            self.say(f"{word.capitalize()} did not help: {SPECS[outcome.vital].label}", 3)
+        elif outcome.result is TreatmentResult.UNNEEDED:
+            self.say(f"{word.capitalize()} was not needed", 3)
+        self.bus.publish(GameEvent(kind="treatment", detail=f"{word}:{outcome.result.value}:{outcome.vital}"))
+
+    def _vital_views(self) -> list[VitalView]:
+        if not self.vitals.active:
+            return []
+        return [
+            VitalView(key=k, label=v.spec.label, value=round(v.value), unit=v.spec.unit, status=v.status.value, trend=v.trend)
+            for k, v in self.vitals.vitals.items()
+        ]
+
     # --- quiz ----------------------------------------------------------------
 
     def _set_patient_speaking(self, speaking: bool) -> None:
         self._patient_speaking = speaking
 
     def _update_quiz(self, dt: float) -> None:
+        if self.quiz.pending is None and self.vitals.alarm_open():
+            return  # one open turn at a time: no question while the nurse waits for an instruction
         step = self.quiz.tick(dt, self._patient_speaking, self.time_left)
         if step is QuizStep.ASK:
             question = self.quiz.pending
@@ -397,6 +442,7 @@ class GameEngine(Service):
             self._move(frame, dt, now)
         self.patient.update(dt)
         self._update_targets(dt, now)
+        self._update_vitals(dt)
         self._update_quiz(dt)
         self.time_left -= dt
         if self.level.complete():
@@ -535,4 +581,7 @@ class GameEngine(Service):
             stress=self.stress.level,
             nurse_selection=self.mode.selection(),
             max_stress=self.quiz_cfg.max_stress,
+            crises=self.patient.crises,
+            vitals=self._vital_views() if in_round else [],
+            vitals_alarm=in_round and self.vitals.alarm_open(),
         )

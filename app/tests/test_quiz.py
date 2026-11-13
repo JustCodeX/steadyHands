@@ -35,7 +35,7 @@ def make_bank(n=3):
     )
 
 
-CFG = QuizConfig(first_after_s=2.0, interval_s=3.0, answer_window_s=4.0, min_time_left_s=5.0)
+CFG = QuizConfig(enabled=True, first_after_s=2.0, interval_s=3.0, answer_window_s=4.0, min_time_left_s=5.0)
 
 
 # --- QuizDirector ----------------------------------------------------------------

@@ -1,6 +1,6 @@
 {
   "name": "Night shift",
-  "time_limit_s": 45,
+  "time_limit_s": 55,
   "start": [
     80,
     150
@@ -65,5 +65,13 @@
   ],
   "quiz": {
     "count": 3
+  },
+  "vitals": {
+    "episodes": 3,
+    "kinds": [
+      "spo2",
+      "bis",
+      "bp"
+    ]
   }
 }

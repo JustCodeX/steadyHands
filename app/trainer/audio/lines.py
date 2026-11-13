@@ -34,6 +34,9 @@ PATIENT_LINES: dict[str, str] = {
     "swab": "Swab.",
     "clamp": "Clamp.",
     "scalpel": "Scalpel.",
+    "oxygen": "Oxygen.",  # for "you can say ..."
+    "anaesthesia": "Anaesthesia.",
+    "adrenaline": "Adrenaline.",
     "cancel": "Cancelled.",
     "pause": "Pause.",
     "continue": "Continue.",
@@ -58,12 +61,52 @@ PATIENT_LINES: dict[str, str] = {
     "quiz_none": "No question answered correctly.",
 }
 
+# The nurse at the vitals monitor. Alarm lines stay under 2 s: they interrupt.
+NURSE_LINES: dict[str, str] = {
+    "alarm_spo2": "Doctor, sats are dropping.",
+    "alarm_bis": "Doctor, he is waking up.",
+    "alarm_bp": "Doctor, pressure is falling.",
+    "remind_spo2": "Saturation is at",
+    "remind_bis": "BIS is at",
+    "remind_bp": "Pressure is at",
+    "unit_spo2": "percent.",
+    "unit_bis": "and rising.",
+    "unit_bp": "systolic.",
+    # read-back of an instruction, as in the operating room
+    "give_oxygen": "More oxygen.",
+    "give_anaesthesia": "Deepening the anaesthesia.",
+    "give_adrenaline": "Adrenaline is in.",
+    "not_helped": "That did not help, doctor.",
+    "unneeded": "That was not needed, doctor.",
+    "already": "Already on it.",
+    "stable": "He is stable again.",
+    "crisis": "He is critical! The team steps in.",
+    "pardon_doctor": "Pardon, doctor?",
+    "you_can_order": "You can say oxygen, anaesthesia or adrenaline.",
+    # result sentence parts
+    "treat_good": "Every instruction to the nurse was right.",
+    "treat_wrong": "Some instructions to the nurse were wrong.",
+    "crises_one": "One crisis.",
+    "crises": "crises.",
+}
+
 MAX_NUMBER = 180
 
 
 def number_id(n: int) -> str:
     n = max(0, min(MAX_NUMBER, int(round(n))))
     return f"n_{n}"
+
+
+def line_text(ids: list[str]) -> str:
+    """What a sequence of nurse clips says, for the subtitle."""
+    out = []
+    for i in ids:
+        if i in NURSE_LINES:
+            out.append(NURSE_LINES[i])
+        elif i.startswith("n_"):
+            out.append(i[2:])
+    return " ".join(out)
 
 
 def question_id(question: str) -> str:
@@ -78,6 +121,7 @@ def explain_id(question: str) -> str:
 
 def all_lines(questions: QuestionBank | None = None) -> dict[str, str]:
     lines = dict(PATIENT_LINES)
+    lines.update(NURSE_LINES)
     for n in range(MAX_NUMBER + 1):
         lines[number_id(n)] = str(n)
     for q in questions.questions if questions else []:

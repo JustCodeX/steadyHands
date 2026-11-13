@@ -27,6 +27,12 @@ class PhraseBuilder:
             ids.append("calls_good")
         else:
             ids.append("calls_wrong")
+        if r.treatments_correct + r.treatments_wrong > 0:
+            ids.append("treat_good" if r.treatments_wrong == 0 else "treat_wrong")
+        if r.crises == 1:
+            ids.append("crises_one")
+        elif r.crises > 1:
+            ids += [number_id(r.crises), "crises"]
         if r.questions_correct + r.questions_wrong > 0:
             if r.questions_wrong == 0:
                 ids.append("quiz_all")
@@ -41,7 +47,33 @@ class PhraseBuilder:
         return ["you_can_say"] + [w for w in words if w]
 
     @staticmethod
+    def nurse(kind: str, detail: str) -> list[str]:
+        """The nurse's lines for the vitals monitor; [] if the event is not hers."""
+        parts = detail.split(":")
+        if kind == "vital_alarm":
+            return [f"alarm_{parts[0]}"]
+        if kind == "vital_reminder":
+            value = int(parts[1]) if len(parts) > 1 and parts[1].lstrip("-").isdigit() else None
+            return [f"remind_{parts[0]}"] + ([number_id(value), f"unit_{parts[0]}"] if value is not None else [])
+        if kind == "vital_crisis":
+            return ["crisis"]
+        if kind == "vital_stable":
+            return ["stable"]
+        if kind == "treatment":
+            treatment, result = parts[0], parts[1] if len(parts) > 1 else ""
+            if result == "already":
+                return ["already"]
+            outcome = {"wrong": ["not_helped"], "unneeded": ["unneeded"]}.get(result, [])
+            return [f"give_{treatment}"] + outcome
+        if kind in ("pardon_doctor", "you_can_order"):
+            return [kind]
+        return []
+
+    @staticmethod
     def for_event(kind: str, detail: str, variant: int) -> list[str]:
+        nurse = PhraseBuilder.nurse(kind, detail)
+        if nurse:
+            return nurse
         if kind == "hit":
             return [f"ouch_{variant % 3 + 1}"]
         if kind == "tool_changed":

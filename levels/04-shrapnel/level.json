@@ -1,6 +1,6 @@
 {
   "name": "Shrapnel",
-  "time_limit_s": 55,
+  "time_limit_s": 65,
   "start": [
     80,
     480
@@ -49,5 +49,12 @@
   ],
   "quiz": {
     "count": 2
+  },
+  "vitals": {
+    "episodes": 2,
+    "kinds": [
+      "bis",
+      "spo2"
+    ]
   }
 }

@@ -65,3 +65,14 @@ def test_levels_get_harder_and_their_quiz_topics_exist():
         if lv.quiz_count:
             assert len(bank.for_topics(lv.quiz_topics)) >= lv.quiz_count
     assert levels[-1].time_limit_s < levels[0].time_limit_s
+
+
+def test_vitals_episodes_start_after_the_first_level_and_rise():
+    from trainer.game.vitals import KINDS
+
+    levels = [Level.load(d) for d in DIRS]
+    episodes = [lv.vitals_episodes for lv in levels]
+    assert episodes[0] == 0  # the first level teaches steering only
+    assert episodes == sorted(episodes) and episodes[-1] >= 2
+    for lv in levels:
+        assert set(lv.vitals_kinds) <= set(KINDS)
