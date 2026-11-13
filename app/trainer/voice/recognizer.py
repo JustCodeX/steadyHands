@@ -20,6 +20,10 @@ class SpeechRecognizer(ABC):
     def finish(self) -> Transcript:
         """End the segment and return what was heard."""
 
+    def partial(self) -> str:
+        """Best guess for the running segment; "" if the engine has none."""
+        return ""
+
     def reset(self) -> None:  # noqa: B027
         pass
 

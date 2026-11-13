@@ -146,6 +146,7 @@ The diode is only needed for magnetic (coil) horns; it does no harm on a piezo. 
 ## Display, touch, audio
 
 - **Image:** hub HDMI to the Elecrow's HDMI input. The UNO Q outputs video over its USB-C port (DisplayPort Alt Mode) through the hub.
+- ⚠ **Measured 13 Nov:** the panel announces **1920×1080** over EDID (not its native 1024×600) and downscales internally. The renderer still sets 1024×600; check text legibility from two metres.
 - **Power:** 5 V over the display's USB-C, about 2.55 W according to the Elecrow wiki for the IPS-D variant. Take it from a hub USB-A port. If the image flickers or the hub drops out, use a separate 5 V USB charger.
 - **Touch:** separate USB connection, optional. It could be used for menus.
 - **Headset:** USB into the hub. A jack headset needs a USB sound card.

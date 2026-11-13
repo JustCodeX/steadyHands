@@ -2,6 +2,26 @@
 
 Only measured numbers go here (date, setup, method). Source for the pitch and the criteria check in [PLAN.md](../PLAN.md#hackathon-criteria-check). Method: [WIRING.md](../WIRING.md#energy-measurement-with-the-peaktech); software values come from `app/logs/metrics.csv` (MetricsLogger).
 
+Values marked *(increment 1)* were measured 13 November 2026 on the same board
+with the earlier Whistle/framebuffer prototype. They carry over as bounds and
+calibration data, not as numbers for this stack — re-measure where it matters.
+
+## Board baseline
+
+Measured 13 November 2026, idle over SSH (no app running).
+
+| Property | Value |
+| --- | --- |
+| Board | Arduino UNO Q, serial 2510574293, device name `geil` |
+| OS | Debian GNU/Linux 13 (trixie), kernel 7.0.0, aarch64, 4 cores |
+| RAM | 3667 MB total · **3077 MB available** at idle |
+| Disk | 9.8 GB root · **~2.7 GB free (72 % full)** with models + clips installed |
+| Python | 3.13.5 — system install has no pip and no `audioop` (removed in 3.13) |
+| Network | Wi-Fi `wlan0`, 192.168.1.155; DNS partly IPv6-only without a route → `curl -4` |
+
+⚠ **Disk is the tighter budget, not RAM.** Vosk small + Piper voice + 219
+rendered clips fit, but there is no room for several model candidates at once.
+
 ## Power and energy
 
 | State | Voltage (V) | Current (A) | Power (W) | Date / setup | Notes |
@@ -20,11 +40,89 @@ Only measured numbers go here (date, setup, method). Source for the pitch and th
 | --- | --- | --- | --- |
 | | | | |
 
+*(increment 1)* End of speech → start of spoken answer: **301–861 ms** over the
+day (microphone → STT → matcher → pre-rendered clip, model loaded once at
+start). P6 requires 3–5 s, so even the worst case has ~4× headroom. Treat this
+as the bound to beat; measure this stack's own numbers with 20 spoken commands.
+
 ## Memory and CPU (from `free -m` and metrics.csv)
+
+Measured 13 November 2026, full app running (Vosk + pygame renderer + 219
+clips), median over the session; n = 195 (idle) / 23 (menu) samples.
 
 | State | MemAvailable (MB) | Process RSS (MB) | CPU (%) |
 | --- | --- | --- | --- |
-| Idle | | | |
-| Menu | | | |
+| Idle | 2231 | 287 | 25 |
+| Menu | 2139 | 277 | 48 |
 | Round, nobody speaking | | | |
 | Round, speaking | | | |
+
+**C1 (at least 1 GB free): met so far** — minimum observed MemAvailable was
+1349 MB, median above 2.1 GB.
+
+## Voice findings *(increment 1 — calibration data and known failure modes)*
+
+### Room noise floor (for EnergyVad calibration)
+
+Measured over 5 s of silence in the hackathon room, RMS per 30 ms frame,
+JBL Tune 530C headset at 16 kHz:
+
+| Percentile | RMS |
+| --- | --- |
+| P50 | 21 |
+| P90 | 46 |
+| P99 | 67 |
+| max | 79 |
+
+A gate threshold of **220** (~3× the measured silence peak) worked all day.
+**Recalibrate in the real hall** — the demo floor will be louder.
+
+### Whisper-family STT hallucinates on silence
+
+Left listening to a quiet room, Whistle returned "Thank you." repeatedly and
+once "Sous-titrage Société Radio-Canada". The Vosk grammar (21 phrases) cannot
+produce arbitrary text, but it *can* still force noise onto its nearest
+phrase — the energy gate in front of the recogniser remains load-bearing, and
+it is also what keeps STT idle while nobody speaks (energy criterion).
+
+### False command from ordinary room conversation
+
+```
+heard "Je ne sais pas si vous voyez, c'est ça" -> pause
+```
+
+French `pas` matched `pause` at **exactly 0.75** — the current default in
+`app/trainer/voice/command_matcher.py`. What fixed it in increment 1:
+threshold **0.82** plus a length guard (candidate within ±2 characters of the
+command). Verified with ten minutes of German/French room conversation: no
+false triggers, all six commands still matched at 1.00.
+
+⚠ **The headset microphone picks up the whole room, not just the wearer.**
+Surrounding conversation transcribed clearly throughout. Re-test the matcher
+threshold in hall noise before the demo, especially for co-op.
+
+### Audio device
+
+The JBL Tune 530C does **not** support 16 kHz natively — `hw:0,0` falls back
+to 48 kHz. Always open it as **`plughw:0,0`** so ALSA resamples.
+
+## Display
+
+Measured 13 November 2026, Elecrow 7" on the hub (HDMI over DP Alt Mode).
+
+| Property | Value |
+| --- | --- |
+| Reported mode (EDID) | **1920×1080** — not the panel's native 1024×600 |
+| Renderer | pygame on X (:0), sets 1024×600 fullscreen; X scales to 1080p |
+| Avatar frame rate *(increment 1, Pillow on /dev/fb0 at full HD)* | ~25 fps |
+
+⚠ The panel announces 1080p and downscales internally. Rendering at 1024×600
+is correct, but **check text legibility from two metres** before trusting any
+font size.
+
+## Still to measure
+
+- Power per state, energy per round (PeakTech, see [WIRING.md](../WIRING.md#energy-measurement-with-the-peaktech))
+- Latency on this stack: 20 spoken commands → median/worst from `metrics.csv`
+- Memory/CPU for the two in-round states
+- Matcher threshold hardening test in hall noise (co-op false triggers)

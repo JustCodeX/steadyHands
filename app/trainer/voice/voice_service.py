@@ -11,9 +11,11 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections import deque
 
 from ..core.config import VoiceConfig
 from ..core.events import (
+    AsrDebugEvent,
     CommandEvent,
     ListenRequest,
     MisheardEvent,
@@ -64,6 +66,9 @@ class VoiceService(Service):
         self._stop = threading.Event()
         self._lock = threading.Lock()
         self.segments = 0
+        self._partial_blocks = 0
+        self._last_partial = ""
+        self._preroll: deque[bytes] = deque(maxlen=max(1, round(cfg.vad_preroll_ms / cfg.block_ms)))
         bus.subscribe(ListenRequest, self._on_listen)
         bus.subscribe(PlaybackStarted, lambda e: self._set_speaking(True))
         bus.subscribe(PlaybackFinished, lambda e: self._set_speaking(False))
@@ -136,6 +141,7 @@ class VoiceService(Service):
                     self.vad.reset()
                     self.segmenter.reset()
                     self.recognizer.reset()
+                    self._preroll.clear()
                     in_segment = False
                 except Exception as exc:
                     log.error("microphone unavailable: %s", exc)
@@ -159,14 +165,24 @@ class VoiceService(Service):
             filtered, x = self.dsp.split(block)
             speech = self.vad.is_speech(filtered)
             phase = self.segmenter.update(speech)
+            pcm = self.dsp.to_int16(x)
             if phase == "start":
                 in_segment = True
                 self.recognizer.reset()
-                self.recognizer.accept(self.dsp.to_int16(x))
+                self._partial_blocks = 0
+                self._last_partial = ""
+                # replay the word onset that passed while the VAD made up its mind
+                for chunk in self._preroll:
+                    self.recognizer.accept(chunk)
+                self._preroll.clear()
+                self.recognizer.accept(pcm)
                 self._publish_state(processing=True)
             elif phase == "continue":
-                self.recognizer.accept(self.dsp.to_int16(x))
-            elif phase == "end" and in_segment:
+                self.recognizer.accept(pcm)
+                self._publish_partial()
+            elif phase == "idle":
+                self._preroll.append(pcm)
+            if phase == "end" and in_segment:
                 in_segment = False
                 speech_end_t = time.monotonic()
                 self.segments += 1
@@ -182,13 +198,34 @@ class VoiceService(Service):
             # ignored silently, so the game never interrupts a conversation.
             # "Pardon?" is reserved for a command heard with low confidence.
             log.debug("segment without a command (text length %d)", len(transcript.text))
+            self._debug_asr(transcript.text, transcript.confidence, "no_match" if transcript.text else "empty")
             return
         confidence = min(match.score, transcript.confidence if transcript.confidence > 0 else match.score)
         if confidence < self.cfg.confidence_threshold:
             self.bus.publish(MisheardEvent(reason="low_confidence", speech_end_t=speech_end_t))
+            self._debug_asr(transcript.text, confidence, "low_confidence", match.word)
             return
         log.info("command %s (%.2f)", match.word, confidence)
         self.bus.publish(CommandEvent(word=match.word, confidence=confidence, speech_end_t=speech_end_t))
+        self._debug_asr(transcript.text, confidence, "command", match.word)
+
+    # --- ASR debug panel (voice.debug_asr) -----------------------------------
+
+    def _publish_partial(self) -> None:
+        """Every 5th block (100 ms), show the engine's running guess."""
+        if not self.cfg.debug_asr:
+            return
+        self._partial_blocks += 1
+        if self._partial_blocks % 5:
+            return
+        text = self.recognizer.partial()
+        if text != self._last_partial:
+            self._last_partial = text
+            self._debug_asr(text, 0.0, "partial")
+
+    def _debug_asr(self, text: str, confidence: float, outcome: str, word: str = "") -> None:
+        if self.cfg.debug_asr:
+            self.bus.publish(AsrDebugEvent(text=text, confidence=confidence, outcome=outcome, word=word))
 
 
 def build_recognizer(cfg: VoiceConfig, matcher_phrases: list[str]) -> SpeechRecognizer:

@@ -36,5 +36,10 @@ class VoskRecognizer(SpeechRecognizer):
             text = " ".join(w for w in text.split() if w != "[unk]")
         return Transcript(text=text, confidence=conf)
 
+    def partial(self) -> str:
+        data = json.loads(self._rec.PartialResult())
+        text = (data.get("partial") or "").strip()
+        return " ".join(w for w in text.split() if w != "[unk]")
+
     def reset(self) -> None:
         self._rec.Reset()
