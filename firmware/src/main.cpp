@@ -1,11 +1,10 @@
 // Steady Hands MCU firmware: reads the Modulinos, filters the tilt, streams
-// input frames to Linux over the Bridge, and drives horn, red LED and the
+// input frames to Linux over the Bridge, and drives the button LEDs and the
 // on-board voice-state LED. All behaviour lives in the modules under lib/.
 #include <Arduino.h>
 #include <Arduino_Modulino.h>
 #include <Wire.h>
 
-#include "Alarm.h"
 #include "BridgeLink.h"
 #include "ButtonPanel.h"
 #include "Config.h"
@@ -21,9 +20,8 @@ sh::TiltSensor tiltSensor;
 sh::KnobInput knobInput;
 sh::ButtonPanel buttonPanel;
 sh::DistanceSensor distanceSensor;
-sh::Alarm hornAndLed(sh::cfg::PIN_RED_LED, sh::cfg::PIN_HORN, sh::cfg::HORN_PASSIVE);
 sh::StatusLed statusLed;
-sh::BridgeLink bridgeLink(hornAndLed, buttonPanel, statusLed, sh::cfg::FRAME_HZ);
+sh::BridgeLink bridgeLink(buttonPanel, statusLed, sh::cfg::FRAME_HZ);
 sh::Firmware firmware;
 
 uint32_t lastReportMs = 0;
@@ -53,7 +51,6 @@ void report() {
 void setup() {
   // The Bridge must come first: it owns the serial link and provides Monitor.
   firmware.add(bridgeLink);
-  firmware.add(hornAndLed);
   firmware.add(statusLed);
   firmware.add(tiltSensor);
   firmware.add(knobInput);

@@ -9,7 +9,6 @@ One PlatformIO library per class, as in [PLAN.md](../../PLAN.md#firmware-mcu-c-p
 | `KnobInput/` | `KnobInput` | Modulino Knob position and button |
 | `ButtonPanel/` | `ButtonPanel` | Modulino Buttons A/B/C and their LEDs |
 | `DistanceSensor/` | `DistanceSensor` | Modulino Distance (optional) |
-| `Alarm/` | `Alarm` | Horn and red LED |
 | `StatusLed/` | `StatusLed` | On-board RGB LED 4 for the voice state |
 | `BridgeLink/` | `BridgeLink` | Frames to Linux, commands from Linux |
 

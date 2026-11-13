@@ -1,6 +1,6 @@
 # UNO Q MCU firmware (PlatformIO)
 
-Sketch for the UNO Q's STM32U585: reads the Modulinos, filters the tilt, streams input frames to Linux over the Bridge, and drives the horn, the red LED and the on-board voice-state LED. Speech and the game run on the Linux side ([`../app`](../app)).
+Sketch for the UNO Q's STM32U585: reads the Modulinos, filters the tilt, streams input frames to Linux over the Bridge, and drives the button LEDs and the on-board voice-state LED. Speech and the game run on the Linux side ([`../app`](../app)).
 
 This project uses the unofficial [`lee-lab-skku/arduinoq`](https://github.com/lee-lab-skku/platform-arduinoq) PlatformIO platform. Its toolchain runs only on Linux, and flashing goes through OpenOCD on the board's own Linux side. As a result, `pio run` cannot build on macOS. `tools/board.sh` copies this folder to the board over USB (adb) and runs PlatformIO on the board. The Git repository on your computer remains the source of truth; the copy on the board is overwritten on each run.
 
@@ -33,19 +33,17 @@ uvx --from platformio pio test -e native     # or: pio test -e native
 | `KnobInput` | Modulino Knob | Position and push button |
 | `ButtonPanel` | Modulino Buttons | A/B/C and their LEDs (active tool) |
 | `DistanceSensor` | Modulino Distance (optional) | Hand height in mm |
-| `Alarm` | D6 red LED, D10 horn | Both on together for *n* ms |
 | `StatusLed` | On-board RGB LED 4 | Off / green pulsing (listening) / yellow (processing) / blue (speaking) |
-| `BridgeLink` | Router Bridge | 50 Hz `input` frames to Linux; `alarm`, `leds`, `voice_state`, `ping`, `status` from Linux |
+| `BridgeLink` | Router Bridge | 50 Hz `input` frames to Linux; `leds`, `voice_state`, `ping`, `status` from Linux |
 
-Modulinos that are missing at boot are retried every 2 s. Every tunable (pins, rates, filter cutoff, horn type) is in [`lib/Core/Config.h`](lib/Core/Config.h). Set `HORN_PASSIVE = true` for a passive piezo (driven with `tone()`), and `RGB_ACTIVE_LOW = true` if LED 4 shows inverted colours.
+Modulinos that are missing at boot are retried every 2 s. Every tunable (rates, filter cutoff) is in [`lib/Core/Config.h`](lib/Core/Config.h). Set `RGB_ACTIVE_LOW = true` if LED 4 shows inverted colours. The sketch uses no header pins: the wall-contact buzz plays in the game on the Linux side.
 
 ### Bridge interface
 
 ```
 MCU -> Linux   notify  input(tilt_x: float, tilt_y: float, knob: int, buttons: int,
                              distance_mm: int, sensors_ok: int, seq: int)
-Linux -> MCU   alarm(ms: int) -> bool        horn + red LED
-               leds(mask: int) -> bool       button LEDs, bit 0..2 = A..C
+Linux -> MCU   leds(mask: int) -> bool       button LEDs, bit 0..2 = A..C
                voice_state(s: int) -> bool   0 off, 1 listening, 2 processing, 3 speaking
                ping() -> int                 millis()
                status() -> int               sensor bit mask (1 tilt, 2 knob, 4 buttons, 8 distance)

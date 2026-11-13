@@ -2,7 +2,7 @@
 
 Method names must match firmware/lib/Core/Config.h:
   MCU -> us   "input"(tilt_x, tilt_y, knob, buttons, distance_mm, sensors_ok, seq)
-  us -> MCU   "alarm"(ms), "leds"(mask), "voice_state"(state), "ping"(), "status"()
+  us -> MCU   "leds"(mask), "voice_state"(state), "ping"(), "status"()
 """
 from __future__ import annotations
 
@@ -21,10 +21,9 @@ TOOL_LED_MASK = {"forceps": 0b001, "swab": 0b010, "clamp": 0b100, "scalpel": 0b1
 class McuLink(Service):
     name = "mcu_link"
 
-    def __init__(self, bus, cfg: McuConfig, alarm_ms: int = 350) -> None:
+    def __init__(self, bus, cfg: McuConfig) -> None:
         super().__init__(bus)
         self.cfg = cfg
-        self.alarm_ms = alarm_ms
         self._bridge = None
         self._last_frame_t: float | None = None
         self._connected = False
@@ -87,9 +86,6 @@ class McuLink(Service):
 
     # --- bus -> MCU ----------------------------------------------------------
 
-    def alarm(self, duration_ms: int) -> None:
-        self._notify("alarm", int(duration_ms))
-
     def set_leds(self, mask: int) -> None:
         self._notify("leds", int(mask) & 0x07)
 
@@ -114,11 +110,10 @@ class McuLink(Service):
             log.warning("notify %s failed: %s", method, exc)
 
     def _on_game_event(self, ev: GameEvent) -> None:
-        if not self.cfg.feedback:
-            return  # no horn or LED wired: feedback comes from the game's sound
-        if ev.kind in ("hit", "bleed_timeout"):
-            self.alarm(self.alarm_ms)
-        elif ev.kind == "tool_changed":
+        # Wall contact is not signalled here: the buzz plays in the game (SoundService).
+        if not self.cfg.tool_leds:
+            return
+        if ev.kind == "tool_changed":
             self.set_leds(TOOL_LED_MASK.get(ev.detail, 0))
         elif ev.kind in ("round_started",):
             self.set_leds(TOOL_LED_MASK.get(ev.detail, 0))
