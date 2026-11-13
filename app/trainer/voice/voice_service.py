@@ -27,6 +27,7 @@ from ..core.events import (
 from ..core.service import Service
 from .audio_input import AudioInput
 from .command_matcher import CommandMatcher
+from .interpreter import CommandInterpreter
 from .recognizer import NullRecognizer, SpeechRecognizer
 from .signal_processor import SignalProcessor
 from .vad import EnergyVad, Segmenter, VoiceActivityDetector
@@ -45,10 +46,11 @@ class VoiceService(Service):
         recognizer: SpeechRecognizer | None = None,
         audio: AudioInput | None = None,
         vad: VoiceActivityDetector | None = None,
+        interpreter: CommandInterpreter | None = None,
     ) -> None:
         super().__init__(bus)
         self.cfg = cfg
-        self.matcher = CommandMatcher(commands)
+        self.interpreter = interpreter or CommandMatcher(commands)
         self.recognizer = recognizer or NullRecognizer()
         self.audio = audio or AudioInput(cfg.sample_rate, cfg.block_ms, cfg.input_device)
         self.dsp = SignalProcessor(cfg.sample_rate, cfg.highpass_hz, cfg.agc_target_rms, cfg.agc_max_gain)
@@ -87,6 +89,7 @@ class VoiceService(Service):
             self._thread.join(timeout=2.0)
         self._safe_audio_stop()
         self.recognizer.unload()
+        self.interpreter.unload()
 
     # --- control -------------------------------------------------------------
 
@@ -192,7 +195,7 @@ class VoiceService(Service):
     def handle_segment(self, speech_end_t: float) -> None:
         """Finish recognition for the segment and publish the outcome."""
         transcript = self.recognizer.finish()
-        match = self.matcher.match(transcript.text)
+        match = self.interpreter.interpret(transcript.text)
         if match is None:
             # Noise, other people talking, or words that resemble no command:
             # ignored silently, so the game never interrupts a conversation.
@@ -228,13 +231,29 @@ class VoiceService(Service):
             self.bus.publish(AsrDebugEvent(text=text, confidence=confidence, outcome=outcome, word=word))
 
 
-def build_recognizer(cfg: VoiceConfig, matcher_phrases: list[str]) -> SpeechRecognizer:
-    """Pick the engine from the config; fall back to NullRecognizer with a clear log line."""
+def build_interpreter(cfg: VoiceConfig, commands: dict[str, list[str]]) -> CommandInterpreter:
+    """Pick the transcript -> command step from the config."""
+    if cfg.interpreter == "keyword":
+        return CommandMatcher(commands)
+    if cfg.interpreter == "needle":
+        # Not built yet: docs/needle-integration.md says where it goes.
+        log.warning("voice.interpreter = needle is not available yet; using the keyword matcher")
+        return CommandMatcher(commands)
+    raise ValueError(f"unknown interpreter: {cfg.interpreter}")
+
+
+def build_recognizer(cfg: VoiceConfig, phrases: list[str]) -> SpeechRecognizer:
+    """Pick the engine from the config; fall back to NullRecognizer with a clear log line.
+
+    `phrases` restricts the vocabulary unless `voice.command_vocabulary` is "open"."""
+    if cfg.command_vocabulary not in ("restricted", "open"):
+        raise ValueError(f"unknown command_vocabulary: {cfg.command_vocabulary}")
     if cfg.recognizer == "vosk":
         try:
             from .vosk_recognizer import VoskRecognizer
 
-            return VoskRecognizer(cfg.model_dir, matcher_phrases, cfg.sample_rate)
+            vocabulary = phrases if cfg.command_vocabulary == "restricted" else None
+            return VoskRecognizer(cfg.model_dir, vocabulary, cfg.sample_rate)
         except Exception as exc:
             log.error("Vosk unavailable (%s); voice commands disabled, keyboard still works", exc)
             return NullRecognizer()

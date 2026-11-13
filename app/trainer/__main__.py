@@ -20,7 +20,7 @@ from .hardware.mcu_link import McuLink
 from .system.metrics_logger import MetricsLogger
 from .system.power_manager import PowerManager
 from .ui.renderer import Renderer
-from .voice.voice_service import VoiceService, build_recognizer
+from .voice.voice_service import VoiceService, build_interpreter, build_recognizer
 
 
 def build_app(cfg, *, mcu: bool, voice: bool, sound: bool, keyboard: bool, display: bool) -> App:
@@ -37,9 +37,9 @@ def build_app(cfg, *, mcu: bool, voice: bool, sound: bool, keyboard: bool, displ
     if sound:
         app.register(SoundService(bus, cfg.audio))
     if voice:
-        service = VoiceService(bus, cfg.voice, cfg.commands)
-        service.recognizer = build_recognizer(cfg.voice, service.matcher.phrases())
-        app.register(service)
+        interpreter = build_interpreter(cfg.voice, cfg.commands)
+        recognizer = build_recognizer(cfg.voice, interpreter.phrases())
+        app.register(VoiceService(bus, cfg.voice, cfg.commands, recognizer=recognizer, interpreter=interpreter))
     app.register(PowerManager(bus, cfg.system, cfg.game.deadzone_g))
     app.register(MetricsLogger(bus, cfg.system))
     return app

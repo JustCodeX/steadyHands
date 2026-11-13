@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from trainer.core.config import DEFAULT_COMMANDS, VoiceConfig
 from trainer.core.event_bus import EventBus
@@ -7,7 +8,7 @@ from trainer.voice.audio_input import AudioInput, Decimator, usb_sound_card_pres
 from trainer.voice.recognizer import SpeechRecognizer, Transcript
 from trainer.voice.signal_processor import SignalProcessor
 from trainer.voice.vad import EnergyVad, Segmenter
-from trainer.voice.voice_service import VoiceService
+from trainer.voice.voice_service import VoiceService, build_interpreter, build_recognizer
 
 
 class FakeRecognizer(SpeechRecognizer):
@@ -254,3 +255,29 @@ def test_usb_sound_card_detection():
     assert usb_sound_card_present(" 0 [ArduinoImolaHPH]: qcm2290 - Arduino-Imola-HPH-LOUT\n") is False
     assert usb_sound_card_present(" 1 [T530C]: USB-Audio - JBL Tune 530C\n") is True
     assert usb_sound_card_present(None) is None  # not Linux: unknown, so no warning
+
+
+def test_needle_interpreter_falls_back_to_the_keyword_matcher(caplog):
+    with caplog.at_level("WARNING"):
+        interpreter = build_interpreter(VoiceConfig(interpreter="needle"), DEFAULT_COMMANDS)
+    assert interpreter.interpret("clamp").word == "clamp"
+    assert "needle" in caplog.text
+    with pytest.raises(ValueError):
+        build_interpreter(VoiceConfig(interpreter="magic"), DEFAULT_COMMANDS)
+
+
+def test_command_vocabulary_decides_whether_the_recogniser_is_restricted(monkeypatch):
+    import trainer.voice.vosk_recognizer as vosk_module
+
+    seen = []
+
+    class SpyRecognizer(FakeRecognizer):
+        def __init__(self, model_dir, phrases, sample_rate):
+            seen.append(phrases)
+
+    monkeypatch.setattr(vosk_module, "VoskRecognizer", SpyRecognizer)
+    build_recognizer(VoiceConfig(), ["clamp", "swab"])
+    build_recognizer(VoiceConfig(command_vocabulary="open"), ["clamp", "swab"])
+    assert seen == [["clamp", "swab"], None]
+    with pytest.raises(ValueError):
+        build_recognizer(VoiceConfig(command_vocabulary="huge"), [])

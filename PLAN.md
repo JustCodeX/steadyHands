@@ -396,6 +396,7 @@ The events on the bus are the interface tables above, written as classes: `Input
 | An instrument | A subclass of `Instrument` in `app/trainer/game/instruments/`; its command word in the config; a reference to it in the level JSON |
 | A game mode | A subclass of `GameMode` |
 | Another speech-to-text engine | A subclass of `SpeechRecognizer`, selected in the config |
+| Another way to turn a transcript into a command (for example the Needle tool-calling model) | A subclass of `CommandInterpreter`, selected in the config (see [docs/needle-integration.md](docs/needle-integration.md)) |
 | Any other feature on Linux (for example extra sound effects) | A new `Service` that subscribes to existing events, registered in `App` |
 
 ## Speech pipeline

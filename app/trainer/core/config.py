@@ -66,6 +66,12 @@ class GameConfig:
 class VoiceConfig:
     enabled: bool = True
     recognizer: str = "vosk"  # "vosk" | "null"
+    # Transcript -> command word. "keyword" is the phrase matcher; "needle" is
+    # reserved for the tool-calling model (docs/needle-integration.md).
+    interpreter: str = "keyword"
+    # "restricted": the recogniser only knows the command phrases (robust).
+    # "open": free speech, which an interpreter like Needle needs to be useful.
+    command_vocabulary: str = "restricted"
     model_dir: str = str(APP_DIR / "models" / "vosk-model-small-en-us-0.15")
     sample_rate: int = 16000
     block_ms: int = 20

@@ -3,16 +3,16 @@ from __future__ import annotations
 
 import difflib
 import re
-from dataclasses import dataclass
+from collections.abc import Sequence
+
+from .interpreter import CommandInterpreter, Match
+
+__all__ = ["CommandMatcher", "Match"]
 
 
-@dataclass
-class Match:
-    word: str
-    score: float  # 0..1
+class CommandMatcher(CommandInterpreter):
+    """The default interpreter: phrase lookup with a fuzzy fallback. No model."""
 
-
-class CommandMatcher:
     def __init__(self, commands: dict[str, list[str]], threshold: float = 0.75) -> None:
         self.commands = commands
         self.threshold = threshold
@@ -25,13 +25,18 @@ class CommandMatcher:
     def normalise(text: str) -> str:
         return re.sub(r"[^a-z ]+", " ", text.lower()).strip()
 
-    def match(self, text: str) -> Match | None:
+    def interpret(self, text: str, allowed: Sequence[str] | None = None) -> Match | None:
+        return self.match(text, allowed)
+
+    def match(self, text: str, allowed: Sequence[str] | None = None) -> Match | None:
         text = self.normalise(text)
         if not text:
             return None
         best: Match | None = None
         tokens = text.split()
         for phrase, word in self._phrases:
+            if allowed is not None and word not in allowed:
+                continue
             # exact phrase inside the transcript wins outright
             if re.search(rf"\b{re.escape(phrase)}\b", text):
                 return Match(word=word, score=1.0)

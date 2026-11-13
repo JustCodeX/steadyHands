@@ -1,4 +1,4 @@
-"""Vosk with the vocabulary restricted to our command phrases."""
+"""Vosk, either restricted to a phrase list or with its full vocabulary."""
 from __future__ import annotations
 
 import json
@@ -11,18 +11,39 @@ log = logging.getLogger(__name__)
 
 
 class VoskRecognizer(SpeechRecognizer):
-    def __init__(self, model_dir: str | Path, phrases: list[str], sample_rate: int = 16000) -> None:
-        from vosk import KaldiRecognizer, Model, SetLogLevel
+    """`phrases` restricts the vocabulary to those phrases (robust, for
+    commands); `phrases=None` recognises free speech with the same model.
 
-        SetLogLevel(-1)
-        model_dir = Path(model_dir)
-        if not model_dir.is_dir():
-            raise FileNotFoundError(f"Vosk model not found at {model_dir}; run app/setup/download_models.sh")
-        self._model = Model(str(model_dir))
-        grammar = json.dumps(sorted(set(phrases)) + ["[unk]"])
-        self._rec = KaldiRecognizer(self._model, sample_rate, grammar)
+    The model is loaded once per directory and shared, so a restricted and an
+    open recogniser side by side cost one model's memory."""
+
+    _models: dict[str, object] = {}
+
+    def __init__(self, model_dir: str | Path, phrases: list[str] | None, sample_rate: int = 16000) -> None:
+        from vosk import KaldiRecognizer
+
+        self._model = self._load_model(Path(model_dir))
+        if phrases is None:
+            self._rec = KaldiRecognizer(self._model, sample_rate)
+            log.info("Vosk recogniser with open vocabulary")
+        else:
+            grammar = json.dumps(sorted(set(phrases)) + ["[unk]"])
+            self._rec = KaldiRecognizer(self._model, sample_rate, grammar)
+            log.info("Vosk recogniser restricted to %d phrases", len(set(phrases)))
         self._rec.SetWords(True)
-        log.info("Vosk model loaded from %s with %d phrases", model_dir, len(phrases))
+
+    @classmethod
+    def _load_model(cls, model_dir: Path):
+        key = str(model_dir.resolve())
+        if key not in cls._models:
+            from vosk import Model, SetLogLevel
+
+            SetLogLevel(-1)
+            if not model_dir.is_dir():
+                raise FileNotFoundError(f"Vosk model not found at {model_dir}; run app/setup/download_models.sh")
+            cls._models[key] = Model(str(model_dir))
+            log.info("Vosk model loaded from %s", model_dir)
+        return cls._models[key]
 
     def accept(self, pcm_int16: bytes) -> None:
         self._rec.AcceptWaveform(pcm_int16)

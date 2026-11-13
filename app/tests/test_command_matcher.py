@@ -21,3 +21,10 @@ def test_phrases_list_has_every_word():
     m = CommandMatcher(DEFAULT_COMMANDS)
     for word in DEFAULT_COMMANDS:
         assert word in m.phrases()
+
+
+def test_allowed_limits_the_commands_considered():
+    m = CommandMatcher(DEFAULT_COMMANDS)
+    assert m.interpret("clamp").word == "clamp"
+    assert m.interpret("clamp", allowed=["forceps", "pause"]) is None
+    assert m.interpret("please pause", allowed=["forceps", "pause"]).word == "pause"
