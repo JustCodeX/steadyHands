@@ -114,6 +114,8 @@ class McuLink(Service):
             log.warning("notify %s failed: %s", method, exc)
 
     def _on_game_event(self, ev: GameEvent) -> None:
+        if not self.cfg.feedback:
+            return  # no horn or LED wired: feedback comes from the game's sound
         if ev.kind in ("hit", "bleed_timeout"):
             self.alarm(self.alarm_ms)
         elif ev.kind == "tool_changed":

@@ -2,6 +2,7 @@
 when it is speaking so the game never hears itself."""
 from __future__ import annotations
 
+import array
 import logging
 import time
 from collections import deque
@@ -18,6 +19,25 @@ log = logging.getLogger(__name__)
 URGENT = {"hit", "bleed_timeout", "win", "lose", "pardon"}
 # Lines the result sentence makes redundant.
 QUIET_KINDS = {"menu", "paused", "resumed", "round_started"}
+# Game events that also get the buzz, the in-game replacement for the MCU horn.
+BUZZ_KINDS = {"hit"}
+# Queue id of the generated buzz. Not a clip file: see make_buzz_bytes().
+SFX_BUZZ = "sfx_buzz"
+BUZZ_RATE = 22050
+
+
+def make_buzz_bytes(rate: int = BUZZ_RATE, seconds: float = 0.35, freq: float = 415.0, level: float = 0.3) -> bytes:
+    """A short square-wave buzz as signed 16-bit mono PCM, faded out at the end.
+
+    Pure Python so it needs no clip file and no numpy; pygame plays it as a Sound."""
+    n = int(rate * seconds)
+    fade = max(1, int(rate * 0.04))
+    period = rate / freq
+    out = array.array("h")
+    for i in range(n):
+        v = level if (i % period) < period / 2 else -level
+        out.append(int(v * min(1.0, (n - i) / fade) * 32767))
+    return out.tobytes()
 
 
 class SoundService(Service):
@@ -34,6 +54,7 @@ class SoundService(Service):
         self._last_sequence: list[str] = []
         self._variant = 0
         self._ready = False
+        self._buzz = None
         bus.subscribe(GameEvent, self._on_game_event)
         bus.subscribe(RoundResult, self._on_result)
 
@@ -47,6 +68,7 @@ class SoundService(Service):
                 pygame.mixer.init(frequency=22050, channels=1)
             self._channel = pygame.mixer.Channel(0)
             self._channel.set_volume(self.cfg.volume)
+            self._buzz = pygame.mixer.Sound(buffer=make_buzz_bytes())
             self._ready = True
             log.info("audio out ready; %d clips in %s", self.clips.count(), self.clips.clips_dir)
         except pygame.error as exc:
@@ -93,6 +115,11 @@ class SoundService(Service):
     def _play_next(self) -> None:
         while self._queue:
             line_id = self._queue.popleft()
+            if line_id == SFX_BUZZ:
+                if self._buzz is not None:
+                    self._channel.play(self._buzz)
+                    return
+                continue
             sound = self.clips.get(line_id)
             if sound is not None:
                 self._channel.play(sound)
@@ -116,6 +143,8 @@ class SoundService(Service):
         if ev.kind == "hit":
             self._variant += 1
         ids = self.phrases.for_event(ev.kind, ev.detail, self._variant)
+        if ev.kind in BUZZ_KINDS and ids:
+            ids = [SFX_BUZZ] + ids
         if ev.kind == "tool_changed":
             # Turning the knob passes several tools quickly: only announce the last one.
             self._queue = deque(i for i in self._queue if i not in TOOL_WORDS)

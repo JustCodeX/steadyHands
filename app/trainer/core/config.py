@@ -95,6 +95,8 @@ class AudioConfig:
 @dataclass
 class McuConfig:
     enabled: bool = True
+    # Horn and red LED on the MCU. Off while they are not wired: the wall-contact buzz plays in the game instead.
+    feedback: bool = False
     address: str = "unix:///var/run/arduino-router.sock"
     connect_timeout_s: float = 5.0
     frame_timeout_s: float = 2.0
