@@ -11,13 +11,14 @@ echo "== 1/5 system packages (sudo)"
 sudo apt-get install -y --no-install-recommends \
   python3-venv python3-pygame python3-numpy libportaudio2 espeak-ng x11-xserver-utils unzip
 
-echo "== 1b/5 USB host mode for the hub (sudo)"
+echo "== 1b/5 USB host mode and hub port restarts (sudo)"
 # USB adb puts the port into device mode and kicks the hub off; we use SSH instead.
 sudo systemctl disable --now adbd 2>/dev/null || true
 sudo install -m 755 setup/usb-host-mode.sh /usr/local/bin/steadyhands-usb-host.sh
 sudo install -m 644 setup/steadyhands-usb-host.service /etc/systemd/system/steadyhands-usb-host.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now steadyhands-usb-host.service
+sudo systemctl enable steadyhands-usb-host.service
+sudo systemctl restart steadyhands-usb-host.service  # restart: pick up a changed script
 
 echo "== 2/5 autologin so the game can use the HDMI display (:0)"
 if ! grep -qs "autologin-user=arduino" /etc/lightdm/lightdm.conf.d/*.conf 2>/dev/null; then
@@ -46,6 +47,18 @@ setup/download_models.sh
 echo "== 4b/5 start the trainer with the desktop"
 mkdir -p ~/.config/autostart
 cp setup/steadyhands.desktop ~/.config/autostart/steadyhands.desktop
+
+echo "== 4c/5 headset as default sound output"
+# A saved default output wins over a newly connected device, so the headset
+# has to be the saved one. Without it, sound falls back to the board's line-out.
+sink="$(wpctl status -n 2>/dev/null | sed -n '/Sinks:/,/Sources:/p' | grep 'alsa_output\.usb-' | grep -o '[0-9][0-9]*\.' | head -1 | tr -d . || true)"
+if [[ -n "$sink" ]]; then
+  wpctl set-default "$sink" && echo "   headset (sink $sink) is the default output"
+else
+  echo "   no USB headset connected, so the default output was not changed."
+  echo "   Check: grep USB-Audio /proc/asound/cards ; journalctl -u steadyhands-usb-host -n 5"
+  echo "   Run this script again once the headset is connected."
+fi
 
 echo "== 5/5 levels and patient lines"
 .venv/bin/python tools/make_levels.py
