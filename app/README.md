@@ -24,7 +24,7 @@ Class diagrams and the recipe for new features: [PLAN.md](../PLAN.md#code-design
 
 ## Setup on the board
 
-Copy the repo to the board (`app/tools/sync_to_board.sh` mirrors `app/` and `levels/` over adb, or `git clone` on the board), then on the board:
+Copy the repo to the board (`app/tools/sync_to_board.sh` mirrors `app/` and `levels/` over USB, or over Wi-Fi with `BOARD_SSH=arduino@<board-ip>` set; or `git clone` on the board), then on the board:
 
 ```sh
 cd ~/promptpimps-unoq/app

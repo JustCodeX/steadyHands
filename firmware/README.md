@@ -23,6 +23,8 @@ uvx --from platformio pio test -e native     # or: pio test -e native
 
 `adb` is taken from your `PATH` or from the Arduino App Lab/IDE installation (`~/Library/Arduino15/packages/arduino/tools/adb`). Set `ANDROID_SERIAL=<serial>` if several boards are connected; list them with `adb devices`.
 
+**Over Wi-Fi instead of USB:** put your SSH public key into the board's `~/.ssh/authorized_keys` once (over the cable), then set `BOARD_SSH=arduino@<board-ip>` in your shell. Every `board.sh` command then runs over SSH and the data cable can stay unplugged. The board's adb daemon has no TCP mode, so SSH is the only wireless route.
+
 ## What the sketch does
 
 | Module (`lib/`) | Hardware | Behaviour |

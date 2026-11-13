@@ -13,6 +13,8 @@
 #   tools/board.sh pio ...    run any pio command on the board
 #   tools/board.sh shell      open a shell in the project dir on the board
 #
+# Transport: USB (adb) by default. Set BOARD_SSH=arduino@<ip> to go over Wi-Fi
+# with ssh instead (needs your key in the board's ~/.ssh/authorized_keys).
 # Env overrides: ADB (adb binary), ANDROID_SERIAL (pick a board when several
 # are attached), REMOTE_DIR (project location on the board).
 set -euo pipefail
@@ -21,17 +23,33 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REMOTE_DIR="${REMOTE_DIR:-promptpimps-unoq/firmware}"   # relative to the board's $HOME
 PIO='$HOME/.platformio/penv/bin/pio'
 
-if [[ -z "${ADB:-}" ]]; then
-  if command -v adb >/dev/null 2>&1; then
-    ADB=adb
-  else
-    ADB="$(ls -d "$HOME"/Library/Arduino15/packages/arduino/tools/adb/*/adb 2>/dev/null | tail -1)"
+BOARD_SSH="${BOARD_SSH:-}"
+if [[ -z "$BOARD_SSH" ]]; then
+  if [[ -z "${ADB:-}" ]]; then
+    if command -v adb >/dev/null 2>&1; then
+      ADB=adb
+    else
+      ADB="$(ls -d "$HOME"/Library/Arduino15/packages/arduino/tools/adb/*/adb 2>/dev/null | tail -1)"
+    fi
   fi
+  [[ -x "$(command -v "$ADB" 2>/dev/null || echo "$ADB")" ]] || {
+    echo "adb not found. Install Arduino App Lab/IDE, set ADB=/path/to/adb, or use BOARD_SSH=arduino@<ip>." >&2; exit 1; }
 fi
-[[ -x "$(command -v "$ADB" 2>/dev/null || echo "$ADB")" ]] || {
-  echo "adb not found. Install Arduino App Lab/IDE or set ADB=/path/to/adb." >&2; exit 1; }
 
-remote() { "$ADB" shell "$@"; }
+SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=5)
+
+# remote CMD...      run a shell command on the board
+# remote_tty CMD     same, with a terminal (monitor, shell)
+# remote_stdin CMD   same, with our stdin forwarded (tar pipe)
+if [[ -n "$BOARD_SSH" ]]; then
+  remote()       { ssh "${SSH_OPTS[@]}" "$BOARD_SSH" "$*"; }
+  remote_tty()   { ssh "${SSH_OPTS[@]}" -t "$BOARD_SSH" "$*"; }
+  remote_stdin() { ssh "${SSH_OPTS[@]}" "$BOARD_SSH" "$*"; }
+else
+  remote()       { "$ADB" shell "$@"; }
+  remote_tty()   { "$ADB" shell -t "$@"; }
+  remote_stdin() { "$ADB" shell "$@"; }
+fi
 
 sync_project() {
   # Mirror the project onto the board, keeping only its .pio build cache.
@@ -39,7 +57,7 @@ sync_project() {
   remote "mkdir -p ~/$REMOTE_DIR && cd ~/$REMOTE_DIR && find . -mindepth 1 -maxdepth 1 ! -name .pio -exec rm -rf {} +"
   COPYFILE_DISABLE=1 tar -C "$PROJECT_DIR" --no-xattrs \
       --exclude=.pio --exclude=.vscode --exclude=.DS_Store -cf - . \
-    | "$ADB" shell "tar -C ~/$REMOTE_DIR -xf -"
+    | remote_stdin "tar -C ~/$REMOTE_DIR -xf -"
 }
 
 check_pio() {
@@ -81,11 +99,11 @@ cmd="${1:-build}"; shift || true
 case "$cmd" in
   build)   check_pio; sync_project; remote "cd ~/$REMOTE_DIR && $PIO run $*" ;;
   upload)  check_pio; check_router; sync_project; remote "cd ~/$REMOTE_DIR && $PIO run -t upload $*" ;;
-  monitor) check_pio; sync_project; "$ADB" shell -t "cd ~/$REMOTE_DIR && $PIO device monitor $*" ;;
+  monitor) check_pio; sync_project; remote_tty "cd ~/$REMOTE_DIR && $PIO device monitor $*" ;;
   reset)   check_pio; check_router; sync_project; remote "cd ~/$REMOTE_DIR && $PIO run -t reset $*" ;;
-  pio)     check_pio; sync_project; "$ADB" shell -t "cd ~/$REMOTE_DIR && $PIO $*" ;;
+  pio)     check_pio; sync_project; remote_tty "cd ~/$REMOTE_DIR && $PIO $*" ;;
   setup)   setup_board ;;
   sync)    sync_project ;;
-  shell)   "$ADB" shell -t "cd ~/$REMOTE_DIR 2>/dev/null; exec \$SHELL -l" ;;
+  shell)   remote_tty "cd ~/$REMOTE_DIR 2>/dev/null; exec \$SHELL -l" ;;
   *) sed -n '2,16p' "$0"; exit 1 ;;
 esac
