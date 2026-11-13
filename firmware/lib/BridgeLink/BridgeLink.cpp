@@ -32,7 +32,8 @@ void BridgeLink::sendFrame() {
   ++seq_;
   Bridge.notify(cfg::RPC_INPUT, frame_.tiltX, frame_.tiltY, static_cast<int>(frame_.knob),
                 static_cast<int>(frame_.buttons), static_cast<int>(frame_.distanceMm),
-                static_cast<int>(frame_.sensorsOk), static_cast<int>(seq_));
+                static_cast<int>(frame_.distanceYMm), static_cast<int>(frame_.sensorsOk),
+                static_cast<int>(seq_));
 }
 
 void BridgeLink::update(uint32_t nowMs) {

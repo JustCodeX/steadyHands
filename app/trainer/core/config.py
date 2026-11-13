@@ -37,10 +37,18 @@ class DisplayConfig:
     fullscreen: bool = True
     fps: int = 30
     driver: str = ""  # e.g. "dummy" for headless tests
+    debug_panel: bool = False  # left side panel: ASR transcripts and sensor readings
 
 
 @dataclass
 class GameConfig:
+    # "velocity": tilt is a speed (original control, also the keyboard).
+    # "position": MCU frames carry an absolute position in -1..1 (two distance
+    # sensors against two walls, firmware CONTROL_MODE 2); keyboard frames
+    # keep velocity behaviour either way.
+    input_mode: str = "velocity"
+    invincible: bool = False  # testing: contacts and the clock cannot end the round
+    position_smooth_tau_s: float = 0.08  # seconds to follow the hand; steady mode slows this
     speed_px_per_s: float = 420.0  # at full tilt (1 g)
     deadzone_g: float = 0.06
     knob_sensitivity_per_step: float = 0.04  # knob changes speed by this fraction per step

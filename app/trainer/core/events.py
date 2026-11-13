@@ -45,7 +45,8 @@ class InputFrame(Event):
     tilt_y: float = 0.0
     knob: int = 0
     buttons: int = 0
-    distance_mm: int = 0
+    distance_mm: int = 0  # position mode: ToF X (left wall)
+    distance_y_mm: int = 0  # position mode: ToF Y (top wall)
     sensors_ok: int = 0
     seq: int = 0
     source: str = "mcu"
@@ -54,6 +55,15 @@ class InputFrame(Event):
     BTN_B = 1 << 1
     BTN_C = 1 << 2
     BTN_KNOB = 1 << 3
+
+    # sensors_ok bits, mirroring firmware/lib/Core/InputFrame.h
+    SENSOR_TILT = 1 << 0
+    SENSOR_KNOB = 1 << 1
+    SENSOR_BUTTONS = 1 << 2
+    SENSOR_DISTANCE = 1 << 3
+    SENSOR_TOF_X = 1 << 4
+    SENSOR_TOF_Y = 1 << 5
+    SENSOR_TOF_CLASH = 1 << 6
 
     @property
     def a(self) -> bool:

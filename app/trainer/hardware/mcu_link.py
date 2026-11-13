@@ -69,7 +69,7 @@ class McuLink(Service):
 
     # --- MCU -> bus ----------------------------------------------------------
 
-    def _on_input(self, tilt_x, tilt_y, knob, buttons, distance_mm, sensors_ok, seq) -> None:
+    def _on_input(self, tilt_x, tilt_y, knob, buttons, distance_mm, distance_y_mm, sensors_ok, seq) -> None:
         # Runs on the Bridge dispatcher thread; publish() only enqueues.
         self._last_frame_t = time.monotonic()
         self.bus.publish(
@@ -79,6 +79,7 @@ class McuLink(Service):
                 knob=int(knob),
                 buttons=int(buttons),
                 distance_mm=int(distance_mm),
+                distance_y_mm=int(distance_y_mm),
                 sensors_ok=int(sensors_ok),
                 seq=int(seq),
                 source="mcu",

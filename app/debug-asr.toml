@@ -1,2 +1,9 @@
 [voice]
 debug_asr = true
+
+[display]
+debug_panel = true
+
+[game]
+input_mode = "position"
+invincible = true

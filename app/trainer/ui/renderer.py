@@ -19,6 +19,7 @@ from ..core.events import (
     GameSnapshot,
     GameState,
     IdleChanged,
+    InputFrame,
     KeyEvent,
     QuitRequest,
     VoiceState,
@@ -61,12 +62,14 @@ class Renderer(Service):
         self.pause_overlay: PauseOverlay | None = None
         self.result_screen: ResultScreen | None = None
         self.asr_partial = ""
-        self.asr_log: deque[AsrDebugEvent] = deque(maxlen=8)
-        self._asr_panel_on = False
+        self.asr_log: deque[AsrDebugEvent] = deque(maxlen=6)
+        self._asr_panel_on = cfg.debug_panel
+        self.frame: InputFrame | None = None
         bus.subscribe(GameSnapshot, self._on_snapshot)
         bus.subscribe(VoiceStateChanged, self._on_voice)
         bus.subscribe(IdleChanged, self._on_idle)
         bus.subscribe(AsrDebugEvent, self._on_asr_debug)
+        bus.subscribe(InputFrame, self._on_frame)
 
     # --- lifecycle -----------------------------------------------------------
 
@@ -126,6 +129,10 @@ class Renderer(Service):
     def _on_idle(self, ev: IdleChanged) -> None:
         self.idle = ev.idle
 
+    def _on_frame(self, frame: InputFrame) -> None:
+        if frame.source == "mcu":
+            self.frame = frame
+
     def _on_asr_debug(self, ev: AsrDebugEvent) -> None:
         self._asr_panel_on = True
         if ev.outcome == "partial":
@@ -177,6 +184,40 @@ class Renderer(Service):
         "empty": theme.MUTED,
     }
 
+    def _draw_sensor_block(self, s: pygame.Surface, x: int, y: int, w: int) -> int:
+        """Live distance readings and the raw axis values, for calibration."""
+        f = self.frame
+        self.fonts.draw(s, "small", "SENSORS (mm to wall)", theme.ACCENT, (x, y))
+        y += 26
+        if f is None:
+            self.fonts.draw(s, "small", "no MCU frames", theme.BAD, (x, y))
+            return y + 30
+        axes = (
+            ("X <- left", f.distance_mm, f.tilt_x, f.sensors_ok & InputFrame.SENSOR_TOF_X),
+            ("Y <- top ", f.distance_y_mm, f.tilt_y, f.sensors_ok & InputFrame.SENSOR_TOF_Y),
+        )
+        for label, mm, axis, found in axes:
+            if not found:
+                colour, value = theme.BAD, "chip not found"
+            elif mm <= 0:
+                colour, value = theme.WARN, "no echo (aim/range)"
+            else:
+                colour = theme.GOOD if 30 <= mm <= 350 else theme.WARN
+                value = f"{mm:4d} mm  {axis:+.2f}"
+            self.fonts.draw(s, "small", f"{label} {value}", colour, (x, y))
+            y += 22
+        # Tells the operator what to do while the two 0x29 sensors sort themselves out.
+        if f.sensors_ok & InputFrame.SENSOR_TOF_CLASH:
+            self.fonts.draw(s, "small", "2 chips on 0x29:", theme.BAD, (x, y))
+            y += 20
+            self.fonts.draw(s, "small", "unplug one, replug it", theme.BAD, (x, y))
+            y += 22
+        elif f.sensors_ok & InputFrame.SENSOR_TOF_X and not f.sensors_ok & InputFrame.SENSOR_TOF_Y:
+            self.fonts.draw(s, "small", "X parked - plug in Y now", theme.ACCENT, (x, y))
+            y += 22
+        pygame.draw.line(s, theme.PANEL_LINE, (x, y), (w - x, y))
+        return y + 12
+
     def _draw_asr_panel(self) -> None:
         s = self.screen
         w = self.ASR_PANEL_W
@@ -185,9 +226,10 @@ class Renderer(Service):
         s.blit(panel, (0, 0))
         pygame.draw.line(s, theme.PANEL_LINE, (w - 1, 0), (w - 1, self.cfg.height))
         x, y = 12, 10
+        y = self._draw_sensor_block(s, x, y, w)
         colour = theme.MIC_COLOURS.get(self.voice.name, theme.MUTED)
-        self.fonts.draw(s, "small", f"ASR debug  ·  {self.voice.name}", colour, (x, y))
-        y += 32
+        self.fonts.draw(s, "small", f"ASR  ·  {self.voice.name}", colour, (x, y))
+        y += 26
         live = "> " + self.asr_partial if self.asr_partial else ("> ..." if self.voice is VoiceState.PROCESSING else ">")
         self.fonts.draw(s, "small", self._fit(live, w - 2 * x), theme.WARN, (x, y))
         y += 34

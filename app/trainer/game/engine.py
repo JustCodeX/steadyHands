@@ -313,6 +313,8 @@ class GameEngine(Service):
         self.time_left -= dt
         if self.level.complete():
             self.end_round(won=True)
+        elif self.cfg.invincible:
+            self.time_left = max(self.time_left, 1.0)  # losing is disabled for testing
         elif self.patient.awake(self.cfg.max_contacts):
             self.end_round(won=False)
         elif self.time_left <= 0:
@@ -321,6 +323,9 @@ class GameEngine(Service):
 
     def _move(self, frame: InputFrame, dt: float, now: float) -> None:
         assert self.level is not None
+        if self.cfg.input_mode == "position" and frame.source == "mcu":
+            self._move_absolute(frame, dt, now)
+            return
         tx, ty = frame.tilt_x, frame.tilt_y
         mag = math.hypot(tx, ty)
         moving = mag > self.cfg.deadzone_g
@@ -346,6 +351,43 @@ class GameEngine(Service):
             self._contact(now)
         else:
             self.x, self.y = nx, ny
+
+    def _move_absolute(self, frame: InputFrame, dt: float, now: float) -> None:
+        """Position mode: tilt_x/tilt_y carry the hand position in -1..1."""
+        assert self.level is not None
+        target_x = (frame.tilt_x + 1.0) / 2.0 * (self.width - 1)
+        target_y = (frame.tilt_y + 1.0) / 2.0 * (self.height - 1)
+        tau = self.cfg.position_smooth_tau_s
+        if now < self.steady_until:
+            tau *= 1.0 / max(1e-6, self.cfg.steady_factor)  # steady = follow more slowly
+        alpha = dt / (tau + dt)
+        nx = self.x + (target_x - self.x) * alpha
+        ny = self.y + (target_y - self.y) * alpha
+        vx = (nx - self.x) / max(dt, 1e-6) / self.cfg.speed_px_per_s
+        vy = (ny - self.y) / max(dt, 1e-6) / self.cfg.speed_px_per_s
+        self.metrics.add_tilt(vx, vy, math.hypot(vx, vy) > self.cfg.deadzone_g)
+        self._step_towards(nx, ny, now)
+
+    def _step_towards(self, nx: float, ny: float, now: float) -> None:
+        """Walk to (nx, ny) in sub-steps so a hand jump cannot tunnel a wall."""
+        assert self.level is not None
+        nx = min(max(nx, 0.0), self.width - 1.0)
+        ny = min(max(ny, 0.0), self.height - 1.0)
+        r = self.cfg.tool_radius
+        steps = max(1, int(math.hypot(nx - self.x, ny - self.y) / max(1, r)))
+        dx = (nx - self.x) / steps
+        dy = (ny - self.y) / steps
+        for _ in range(steps):
+            cx, cy = self.x + dx, self.y + dy
+            if self.level.mask.circle_hits_wall(cx, cy, r):
+                # Slide along the wall where possible, otherwise stay.
+                if not self.level.mask.circle_hits_wall(cx, self.y, r):
+                    self.x = cx
+                elif not self.level.mask.circle_hits_wall(self.x, cy, r):
+                    self.y = cy
+                self._contact(now)
+                return
+            self.x, self.y = cx, cy
 
     def _contact(self, now: float) -> None:
         if now - self._last_contact_t < self.cfg.contact_cooldown_s:
