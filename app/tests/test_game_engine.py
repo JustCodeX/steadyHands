@@ -71,7 +71,7 @@ def test_menu_to_round_with_button_a(engine):
     assert any(isinstance(e, ListenRequest) and e.on for e in engine.events)
 
 
-def test_tilt_moves_and_wall_contact_sounds_alarm(engine):
+def test_tilt_moves_and_wall_contact_is_a_hit(engine):
     engine.start_round()
     x0 = engine.x
     engine.on_input(InputFrame(tilt_x=1.0))

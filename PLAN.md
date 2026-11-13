@@ -37,7 +37,7 @@ A working prototype of a surgeon trainer: you guide a surgical instrument throug
 | ✅ Code style | Object-oriented and modular: every feature is a class behind an interface (see [Code design](#code-design)) |
 | ❓ D2 Speech-to-text | Timon decides (model deployment and ASR choice are his area). The code ships `VoskRecognizer` (Vosk small English, vocabulary restricted to our commands: aarch64 wheel, 40 MB model) as the working default; any other engine is a further `SpeechRecognizer` subclass selected in the config (see [Speech pipeline](#speech-pipeline)) |
 | ✅ Purpose | Working prototype of a surgeon trainer, inspired by Dr. Bibber |
-| ✅ Wall feedback | No horn or red LED is wired. A wall touch plays a buzz in the game (`SoundService`), then the patient's "Ouch!". The MCU alarm and LEDs stay off until `McuConfig.feedback` is set to `true`. |
+| ✅ Wall feedback | A wall touch plays a buzz in the game (`SoundService`), then the patient's "Ouch!". There is no horn and no signal LED: both were removed from the design, the firmware, and the wiring. |
 | ❓ D3 Name | "Steady Hands" is a placeholder |
 | ❓ D4 Audio for the audience | Headset audio only reaches the person wearing it. Does the display have an audio jack, or can we get a USB speaker? |
 | ❓ D5 License for our code | Must fit the licenses of the models we use (see [Licenses](#licenses)) |
@@ -47,7 +47,7 @@ A working prototype of a surgeon trainer: you guide a surgical instrument throug
 
 ### One-player mode
 
-The surgeon holds the **instrument**, a handle containing the Modulino Movement, and tilts it to steer the tool tip through the corridors of the patient map. The surgeon wears the headset and calls for tools. Touching a wall plays a buzz in the game, makes the patient react ("Ouch!"), and raises the patient's heart rate. The horn and red LED on the MCU are not wired yet, so they are off by default. After three touches, the patient wakes up and the round is lost. Removing every item before time runs out wins. A round lasts about 60 seconds, so a trainee gets feedback within the first minute.
+The surgeon holds the **instrument**, a handle containing the Modulino Movement, and tilts it to steer the tool tip through the corridors of the patient map. The surgeon wears the headset and calls for tools. Touching a wall plays a buzz in the game, makes the patient react ("Ouch!"), and raises the patient's heart rate. After three touches, the patient wakes up and the round is lost. Removing every item before time runs out wins. A round lasts about 60 seconds, so a trainee gets feedback within the first minute.
 
 ### Co-op mode (two players)
 
@@ -112,7 +112,7 @@ The trainer also speaks the result, for example "48 seconds, two contacts, stead
 flowchart LR
   subgraph MCU["UNO Q MCU (STM32U585)"]
     S["Sensor loop 100 Hz<br/>tilt filtering"]
-    O["Horn + red LED"]
+    O["Button LEDs + voice-state LED"]
   end
   subgraph MPU["UNO Q Linux (QRB2210)"]
     G["Game loop + rendering<br/>30 fps cap"]
@@ -121,7 +121,7 @@ flowchart LR
   end
   MOD["Modulinos<br/>Movement · Buttons · Knob · Distance"] -- "Qwiic I2C" --> S
   S -- "input frames 50 Hz (Bridge)" --> G
-  G -- "alarm (Bridge)" --> O
+  G -- "leds, voice_state (Bridge)" --> O
   H["Headset mic"] --> V
   V -- "command events" --> G
   G -- "game events" --> A
@@ -138,7 +138,6 @@ MCU and Linux, over the Bridge:
 | Direction | Message | Content |
 | --- | --- | --- |
 | MCU → Linux | `input` (50 Hz) | `tilt_x`, `tilt_y` (filtered), `knob`, `buttons` (bit mask), `distance_mm` |
-| Linux → MCU | `alarm` | Duration in ms: horn and red LED on together |
 | Linux → MCU | `leds` | Button LED mask, used to show the active tool |
 | Linux → MCU | `voice_state` | `off`, `listening`, `processing`, or `speaking`, shown on the UNO Q's on-board RGB LED 4 (no wiring needed) |
 
@@ -207,9 +206,6 @@ classDiagram
   class ButtonPanel {
     +setLeds(uint8 mask) void
   }
-  class Alarm {
-    +trigger(uint16 durationMs) void
-  }
   class StatusLed {
     +show(VoiceState state) void
   }
@@ -223,14 +219,12 @@ classDiagram
   InputSource <|.. KnobInput
   InputSource <|.. ButtonPanel
   InputSource <|.. DistanceSensor
-  Module <|.. Alarm
   Module <|.. StatusLed
   Module <|.. BridgeLink
   Firmware o-- Module : updates
   TiltSensor *-- LowPassFilter
   BridgeLink o-- InputSource : reads
   BridgeLink ..> InputFrame : sends
-  BridgeLink --> Alarm : alarm
   BridgeLink --> ButtonPanel : leds
   BridgeLink --> StatusLed : voice_state
 ```
@@ -239,7 +233,8 @@ classDiagram
 
 Every feature derives from `Service` and is registered with `App`. Services never call each other directly; they publish and subscribe to events on the `EventBus`. For example:
 - `McuLink` publishes an `InputFrame` event for every frame from the MCU.
-- `McuLink` turns `GameEvent(hit)` into `alarm()`, and `VoiceStateChanged` into `voice_state()`.
+- `McuLink` turns `VoiceStateChanged` into `voice_state()`, and `GameEvent(tool_changed)` into `set_leds()` when `mcu.tool_leds` is on.
+- `SoundService` turns `GameEvent(hit)` into the wall-contact buzz and the patient's line.
 - `PowerManager` sends everything to idle after 60 s without input.
 
 ```mermaid
@@ -262,7 +257,6 @@ classDiagram
     +stop()
   }
   class McuLink {
-    +alarm(duration_ms)
     +set_leds(mask)
     +set_voice_state(state)
   }
@@ -508,7 +502,7 @@ The event encourages publishing the build. By the end of the event, we publish:
 | --- | --- | --- |
 | 1 | **Voice**: headset audio, VAD, speech-to-text, command matching, pre-rendered patient lines | Spoken commands arrive as `command` events with the measured response time |
 | 2 | **Game and display**: game loop, levels, collision, on-screen display (heart rate, tool, time), modes | Three levels playable with keyboard controls before the hardware is ready |
-| 3 | **Hardware and MCU**: Modulino chain, sketch, horn and LED, instrument handle, case | `input` frames arrive at 50 Hz; `alarm` works |
+| 3 | **Hardware and MCU**: Modulino chain, sketch, instrument handle, case | `input` frames arrive at 50 Hz; `leds` and `voice_state` work |
 | 4 | **Integration, energy, pitch**: Bridge interfaces, start scripts, idle mode, measurements, demo script | Single-command start; measured values in the README; two-minute demo rehearsed |
 
 ## Milestones
@@ -517,8 +511,8 @@ Event end: 14 November, 12:00. The exact build cutoff is not published; ask the 
 
 | Milestone | Target | Done when |
 | --- | --- | --- |
-| **M0 Risk tests** | 13 Nov, about 15:00 | Each person has proven their riskiest part on the real board: a spoken command from the headset produces a spoken reply on the board (the README's first milestone), with latency measured; tilt values arrive on Linux; a window appears full-screen on the Elecrow; the horn and LED switch. D2 decided. |
-| **M1 First playable** | 13 Nov, about 20:00 | One-player mode works for one level: tilt steers, a wall touch sounds the horn and lights the LED, and one voice command changes the tool |
+| **M0 Risk tests** | 13 Nov, about 15:00 | Each person has proven their riskiest part on the real board: a spoken command from the headset produces a spoken reply on the board (the README's first milestone), with latency measured; tilt values arrive on Linux; a window appears full-screen on the Elecrow. D2 decided. |
+| **M1 First playable** | 13 Nov, about 20:00 | One-player mode works for one level: tilt steers, a wall touch plays the buzz and the patient's "Ouch!", and one voice command changes the tool |
 | **M2 Feature complete** | 14 Nov, about 03:00 | All commands including `cancel`; voice states visible on screen and LED; "Pardon?" for misheard speech; patient lines; three levels; co-op; idle mode |
 | **M3 Demo ready** | 14 Nov, about 09:00 | Every row in the [criteria check](#hackathon-criteria-check) verified on the board; 10 demo runs in a row without a restart; measured values in the README; demo script rehearsed in under 2 minutes; build published (D6). After that, only bug fixes. |
 
@@ -529,7 +523,7 @@ Event end: 14 November, 12:00. The exact build cutoff is not published; ask the 
 | Time | What happens | Shows criteria |
 | --- | --- | --- |
 | 0:00–0:15 | The problem: operating-room trainees need steady hands and clear instrument calls. We built an offline trainer on the UNO Q. | U1, U4 |
-| 0:15–1:15 | One live round: tilt the instrument; call "forceps"; touch a wall (horn, LED, "Ouch!"); say something unclear (the patient asks "Pardon?"); say `cancel`; remove the item. The voice states are visible throughout. | U2, P1, P3–P6 |
+| 0:15–1:15 | One live round: tilt the instrument; call "forceps"; touch a wall (buzz, "Ouch!"); say something unclear (the patient asks "Pardon?"); say `cancel`; remove the item. The voice states are visible throughout. | U2, P1, P3–P6 |
 | 1:15–1:35 | Feedback screen plus the spoken result | U3, P1, P2 |
 | 1:35–1:50 | Measured values: energy per round, latency, RAM. Wi-Fi is off, and nothing leaves the board. | C1–C4, P6–P8 |
 | 1:50–2:00 | Co-op call-back in one sentence; the build is open source | C5 |
@@ -542,7 +536,6 @@ Event end: 14 November, 12:00. The exact build cutoff is not published; ask the 
 | Bridge or Modulino library does not work with PlatformIO | Resolved: both compile with the `arduinoq` platform (it ships a patched RouterBridge; see `firmware/platformio.ini` for the include-path detail). Fallbacks if the link misbehaves: read the sensors over `Wire1` directly; send frames as text lines over the monitor channel (port 7500). |
 | Python rendering too slow on the board | Lower resolution or fps; redraw only the parts that change |
 | Hub cannot power the display and headset | Separate 5 V USB charger for the display |
-| Horn needs more than 5 V or too much current | Driver with a MOSFET, or replace it with a 5 V buzzer (see [WIRING.md](WIRING.md#horn)) |
 | Not enough time | Cut in this order: distance sensor, scalpel, co-op extras. One-player mode with three tools is the minimum version. |
 
 ## Definition of done
@@ -616,7 +609,7 @@ This structure is in the repo; every folder has a README or a package docstring 
 ```
 firmware/                 MCU sketch (C++, PlatformIO)
   src/main.cpp            creates the modules and runs them
-  lib/<Module>/           one library per module: Core, TiltSensor, Alarm, BridgeLink, ...
+  lib/<Module>/           one library per module: Core, TiltSensor, StatusLed, BridgeLink, ...
   test/                   unit tests (pio test)
   tools/board.sh          build and flash on the board over adb
 app/                      Linux side (Python)

@@ -48,9 +48,9 @@ Controls without voice: tilt moves, the knob picks the instrument (while paused 
 
 Keyboard: arrows tilt (Shift = slow), Space = A, M = B, C = C, +/- turn the knob, Enter presses it. As if spoken: 1-4 call tools, L light, S steady, X cancel, R repeat, H help, N new game. Esc quits.
 
-Settings: copy the defaults from `trainer/core/config.py` into a TOML file and pass `--config file.toml` (or set `STEADYHANDS_CONFIG`). Typical overrides: `voice.input_device = ""` (default input instead of the USB headset), `audio.output_device`, `game.speed_px_per_s`, `voice.confidence_threshold`, `mcu.feedback = true` (once the horn and red LED are wired).
+Settings: copy the defaults from `trainer/core/config.py` into a TOML file and pass `--config file.toml` (or set `STEADYHANDS_CONFIG`). Typical overrides: `voice.input_device = ""` (default input instead of the USB headset), `audio.output_device`, `game.speed_px_per_s`, `voice.confidence_threshold`, `mcu.tool_leds = true` (show the active tool on the Modulino Buttons LEDs).
 
-Wall contact plays a generated buzz through the audio output (`trainer/audio/sound_service.py`, `make_buzz_bytes`). The MCU horn and LED are off unless `mcu.feedback` is `true`.
+Wall contact plays a generated buzz through the audio output (`trainer/audio/sound_service.py`, `make_buzz_bytes`). There is no horn or signal LED on the MCU.
 
 ## Tests
 
@@ -61,5 +61,5 @@ cd app && python -m pytest        # headless: SDL dummy drivers are set in tests
 ## M0 checks on the board
 
 ```sh
-app/.venv/bin/python app/tools/bridge_probe.py 5    # frames/s from the MCU, then alarm/LED/voice-state test
+app/.venv/bin/python app/tools/bridge_probe.py 5    # frames/s from the MCU, then button-LED and voice-state test
 ```

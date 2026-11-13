@@ -16,11 +16,11 @@ You guide a surgical instrument through a patient map on a 7-inch screen by tilt
 
 ## Hardware
 
-- **Arduino UNO Q:** Linux (QRB2210) for the game, display, and speech; MCU (STM32U585) for sensors, horn, and LED
+- **Arduino UNO Q:** Linux (QRB2210) for the game, display, and speech; MCU (STM32U585) for the sensors and the status LEDs
 - **Display:** Elecrow 7" IPS over HDMI, through a USB-C hub
 - **Modulinos:** Movement (tilt), Buttons, Knob, optionally Distance, chained over Qwiic
 - **Audio:** headset
-- **Signals:** none for now. The wall buzz plays in the game; the horn and red LED stay off until they are wired (`McuConfig.feedback`).
+- **Signals:** the wall buzz plays in the game, through the headset. There is no horn and no signal LED.
 
 ## Hardware wiring
 
@@ -34,8 +34,6 @@ flowchart LR
   B -- "Qwiic" --> K["Modulino Knob"]
   K -- "Qwiic" --> DI["Modulino Distance (optional)"]
   DI -- "long Qwiic cable" --> M["Modulino Movement<br/>in the instrument"]
-  Q -- "D6 via 330 Ω" --> LED["Red LED"]
-  Q -- "D10 via NPN driver" --> HORN["Horn"]
 ```
 
 Pin-level diagram, circuits, power, and measurement: [WIRING.md](WIRING.md).
@@ -70,7 +68,6 @@ classDiagram
   InputSource <|.. TiltSensor
   InputSource <|.. ButtonPanel
   InputSource <|.. KnobInput
-  Module <|.. Alarm
   Module <|.. StatusLed
   Module <|.. BridgeLink
   BridgeLink .. McuLink : Bridge RPC

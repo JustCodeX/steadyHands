@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 URGENT = {"hit", "bleed_timeout", "win", "lose", "pardon"}
 # Lines the result sentence makes redundant.
 QUIET_KINDS = {"menu", "paused", "resumed", "round_started"}
-# Game events that also get the buzz, the in-game replacement for the MCU horn.
+# Game events that also get the buzz.
 BUZZ_KINDS = {"hit"}
 # Queue id of the generated buzz. Not a clip file: see make_buzz_bytes().
 SFX_BUZZ = "sfx_buzz"

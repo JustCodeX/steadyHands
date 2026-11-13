@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """M0 check for the MCU link, without the game: prints input frames and tests
-alarm/leds/voice_state. Run on the board:  python tools/bridge_probe.py [seconds]
+leds/voice_state. Run on the board:  python tools/bridge_probe.py [seconds]
 """
 from __future__ import annotations
 
@@ -36,7 +36,6 @@ def main() -> int:
         b.notify("voice_state", state)
         time.sleep(0.4)
     b.notify("leds", 0b101)
-    b.notify("alarm", 300)
     time.sleep(0.6)
     b.notify("leds", 0)
     b.disconnect()

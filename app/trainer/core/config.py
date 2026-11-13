@@ -51,7 +51,6 @@ class GameConfig:
     grab_dwell_s: float = 1.0  # hover this long with the right tool to grab hands-free
     contact_cooldown_s: float = 0.5
     max_contacts: int = 3
-    alarm_ms: int = 350
     steady_factor: float = 0.4
     steady_duration_s: float = 6.0
     light_duration_s: float = 6.0
@@ -101,8 +100,8 @@ class AudioConfig:
 @dataclass
 class McuConfig:
     enabled: bool = True
-    # Horn and red LED on the MCU. Off while they are not wired: the wall-contact buzz plays in the game instead.
-    feedback: bool = False
+    # Show the active tool on the Modulino Buttons LEDs.
+    tool_leds: bool = False
     address: str = "unix:///var/run/arduino-router.sock"
     connect_timeout_s: float = 5.0
     frame_timeout_s: float = 2.0

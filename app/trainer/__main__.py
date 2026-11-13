@@ -33,7 +33,7 @@ def build_app(cfg, *, mcu: bool, voice: bool, sound: bool, keyboard: bool, displ
     if keyboard:
         app.register(KeyboardInput(bus))
     if mcu:
-        app.register(McuLink(bus, cfg.mcu, cfg.game.alarm_ms))
+        app.register(McuLink(bus, cfg.mcu))
     if sound:
         app.register(SoundService(bus, cfg.audio))
     if voice:
