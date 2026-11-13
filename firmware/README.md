@@ -33,7 +33,7 @@ uvx --from platformio pio test -e native     # or: pio test -e native
 | `KnobInput` | Modulino Knob | Position and push button |
 | `ButtonPanel` | Modulino Buttons | A/B/C and their LEDs (active tool) |
 | `DistanceSensor` | Modulino Distance (optional) | Hand height in mm |
-| `Alarm` | D6 red LED, D9 horn | Both on together for *n* ms |
+| `Alarm` | D6 red LED, D10 horn | Both on together for *n* ms |
 | `StatusLed` | On-board RGB LED 4 | Off / green pulsing (listening) / yellow (processing) / blue (speaking) |
 | `BridgeLink` | Router Bridge | 50 Hz `input` frames to Linux; `alarm`, `leds`, `voice_state`, `ping`, `status` from Linux |
 
