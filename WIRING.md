@@ -38,7 +38,7 @@ flowchart LR
   K -- "Qwiic" --> DI["Modulino Distance (optional)"]
   DI -- "long Qwiic cable" --> M["Modulino Movement<br/>in the instrument"]
   Q -- "D6 via 330 Ω" --> LED["Red LED"]
-  Q -- "D9 via transistor driver" --> HORN["Horn"]
+  Q -- "D10 via transistor driver" --> HORN["Horn"]
 ```
 
 ## UNO Q pin assignment
@@ -48,7 +48,7 @@ flowchart LR
 | USB-C | Hub | The board's only USB port: power in, plus HDMI over DisplayPort Alt Mode, plus USB devices |
 | Qwiic | Modulino chain | I2C bus `Wire1`, 3.3 V. Not `Wire`. |
 | D6 (PWM) | Red LED via 330 Ω | About 4 mA at 3.3 V; PWM allows fading |
-| D9 (PWM) | Transistor base via 1 kΩ | Supports `tone()` for a passive horn |
+| D10 (PWM) | Transistor base via 1 kΩ | Supports `tone()` for a passive horn |
 | 5V | Horn (+) | |
 | GND | LED cathode, transistor emitter | One shared ground for everything |
 | Reserved | D0/D1 (UART), D20/D21 (header I2C) | Keep free |
@@ -64,7 +64,7 @@ flowchart LR
   subgraph UNOQ["Arduino UNO Q"]
     QW["Qwiic<br/>Wire1, 3.3 V"]
     D6["D6 (PWM)"]
-    D9["D9 (PWM)"]
+    D10["D10 (PWM)"]
     V5["5V"]
     GND["GND"]
   end
@@ -85,7 +85,7 @@ flowchart LR
     MM["Movement<br/>in the instrument"]
   end
   D6 --> R1 --> LED -- "cathode" --> GND
-  D9 --> R2 -- "base" --> Q1
+  D10 --> R2 -- "base" --> Q1
   V5 -- "+" --> HORN
   HORN -- "− to collector" --> Q1
   Q1 -- "emitter" --> GND
@@ -121,7 +121,7 @@ UNO Q D6 ──[ 330 Ω ]──►|── UNO Q GND
 | --- | --- |
 | Active buzzer, 3–5 V, up to about 30 mA | NPN circuit below (on/off with `digitalWrite`) |
 | Passive piezo (no built-in oscillator) | NPN circuit below; set the pitch with `tone(9, frequency)` |
-| More than about 30 mA | Logic-level N-MOSFET that switches fully at 3.3 V on the gate (for example AO3400): gate through 100 Ω to D9, 100 kΩ from gate to GND |
+| More than about 30 mA | Logic-level N-MOSFET that switches fully at 3.3 V on the gate (for example AO3400): gate through 100 Ω to D10, 100 kΩ from gate to GND |
 | 12 V or more | Separate power supply with shared GND, plus a MOSFET, or replace with a 5 V buzzer |
 
 ```
@@ -133,7 +133,7 @@ UNO Q 5V ───────────┬───────────�
                     ├────────────────┘
                     │
                     C
-UNO Q D9 ──[1 kΩ]── B    NPN (2N2222 / BC337)
+UNO Q D10 ──[1 kΩ]── B    NPN (2N2222 / BC337)
                     E
                     │
 UNO Q GND ──────────┘

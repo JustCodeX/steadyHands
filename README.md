@@ -35,7 +35,7 @@ flowchart LR
   K -- "Qwiic" --> DI["Modulino Distance (optional)"]
   DI -- "long Qwiic cable" --> M["Modulino Movement<br/>in the instrument"]
   Q -- "D6 via 330 Ω" --> LED["Red LED"]
-  Q -- "D9 via NPN driver" --> HORN["Horn"]
+  Q -- "D10 via NPN driver" --> HORN["Horn"]
 ```
 
 Pin-level diagram, circuits, power, and measurement: [WIRING.md](WIRING.md).
