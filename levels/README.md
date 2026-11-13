@@ -1,6 +1,6 @@
 # Levels
 
-One folder per level. Anyone on the team can make a level with an image editor; `app/tools/make_levels.py` generates the three demo levels so that playable levels always exist (re-running it overwrites them).
+One folder per level. Anyone on the team can make a level with an image editor; `app/tools/make_levels.py` generates the six demo levels so that playable levels always exist (re-running it overwrites them).
 
 ```
 levels/01-splinter/

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Generate the three demo levels (mask.png + level.json) under levels/.
+"""Generate the six demo levels (mask.png + level.json) under levels/.
 
 Anyone can replace these with hand-drawn masks; this just guarantees that
-playable levels exist. Corridors get narrower and time shorter per level.
+playable levels exist. Corridors get narrower and time shorter per level,
+and the patient asks more questions. Keep corridors above y = 540: an open
+quiz question is shown along the bottom edge.
 Usage: python tools/make_levels.py [levels_dir]
 """
 from __future__ import annotations
@@ -29,6 +31,7 @@ LEVELS = [
             {"id": "splinter", "position": [560, 160], "needs": "forceps"},
             {"id": "shard", "position": [920, 300], "needs": "forceps"},
         ],
+        "quiz": {"count": 0},  # the first level is for learning to steer
     },
     {
         "dir": "02-bleeding",
@@ -41,6 +44,7 @@ LEVELS = [
             {"id": "blood", "position": [700, 470], "needs": "swab"},
             {"id": "button", "position": [930, 180], "needs": "forceps"},
         ],
+        "quiz": {"count": 1, "topics": ["instruments"]},
     },
     {
         "dir": "03-deep-cut",
@@ -55,6 +59,54 @@ LEVELS = [
             {"id": "needle", "position": [940, 420], "needs": "forceps"},
         ],
         "dark": [[560, 400, 300, 170]],
+        "quiz": {"count": 2, "topics": ["instruments", "room"]},
+    },
+    {
+        "dir": "04-shrapnel",
+        "name": "Shrapnel",
+        "time_limit_s": 55,
+        "width": 56,
+        "path": [(80, 480), (80, 140), (250, 140), (250, 480), (430, 480), (430, 140), (610, 140), (610, 480), (790, 480), (790, 140), (950, 140), (950, 400)],
+        "targets": [
+            {"id": "glass", "position": [250, 140], "needs": "forceps"},
+            {"id": "blood", "position": [430, 480], "needs": "swab"},
+            {"id": "needle", "position": [610, 140], "needs": "forceps"},
+            {"id": "shard", "position": [790, 480], "needs": "forceps"},
+            {"id": "splinter", "position": [950, 400], "needs": "forceps"},
+        ],
+        "quiz": {"count": 2},
+    },
+    {
+        "dir": "05-double-bleed",
+        "name": "Double bleed",
+        "time_limit_s": 50,
+        "width": 52,
+        "path": [(90, 300), (240, 300), (240, 130), (470, 130), (470, 470), (700, 470), (700, 130), (930, 130), (930, 470)],
+        "targets": [
+            {"id": "bleeding_1", "position": [240, 130], "needs": "clamp", "timer_s": 16},
+            {"id": "blood", "position": [470, 470], "needs": "swab"},
+            {"id": "bleeding_2", "position": [700, 130], "needs": "clamp", "timer_s": 24},
+            {"id": "button", "position": [930, 130], "needs": "forceps"},
+            {"id": "needle", "position": [930, 470], "needs": "forceps"},
+        ],
+        "dark": [[340, 390, 300, 150]],
+        "quiz": {"count": 2, "topics": ["safety", "patient"]},
+    },
+    {
+        "dir": "06-night-shift",
+        "name": "Night shift",
+        "time_limit_s": 45,
+        "width": 48,
+        "path": [(80, 150), (300, 150), (300, 470), (520, 470), (520, 150), (740, 150), (740, 470), (950, 470), (950, 200)],
+        "targets": [
+            {"id": "bleeding_1", "position": [300, 470], "needs": "clamp", "timer_s": 15},
+            {"id": "glass", "position": [520, 150], "needs": "forceps"},
+            {"id": "bleeding_2", "position": [740, 150], "needs": "clamp", "timer_s": 20},
+            {"id": "blood", "position": [740, 470], "needs": "swab"},
+            {"id": "splinter", "position": [950, 200], "needs": "forceps"},
+        ],
+        "dark": [[370, 90, 300, 130], [590, 400, 300, 140]],
+        "quiz": {"count": 3},
     },
 ]
 
@@ -91,6 +143,8 @@ def main(levels_dir: Path) -> None:
         }
         if spec.get("dark"):
             data["dark"] = spec["dark"]
+        if spec.get("quiz"):
+            data["quiz"] = spec["quiz"]
         with open(d / "level.json", "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
         print(f"wrote {d}")

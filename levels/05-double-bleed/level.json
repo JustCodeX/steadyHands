@@ -1,0 +1,67 @@
+{
+  "name": "Double bleed",
+  "time_limit_s": 50,
+  "start": [
+    90,
+    300
+  ],
+  "targets": [
+    {
+      "id": "bleeding_1",
+      "position": [
+        240,
+        130
+      ],
+      "needs": "clamp",
+      "timer_s": 16
+    },
+    {
+      "id": "blood",
+      "position": [
+        470,
+        470
+      ],
+      "needs": "swab"
+    },
+    {
+      "id": "bleeding_2",
+      "position": [
+        700,
+        130
+      ],
+      "needs": "clamp",
+      "timer_s": 24
+    },
+    {
+      "id": "button",
+      "position": [
+        930,
+        130
+      ],
+      "needs": "forceps"
+    },
+    {
+      "id": "needle",
+      "position": [
+        930,
+        470
+      ],
+      "needs": "forceps"
+    }
+  ],
+  "dark": [
+    [
+      340,
+      390,
+      300,
+      150
+    ]
+  ],
+  "quiz": {
+    "count": 2,
+    "topics": [
+      "safety",
+      "patient"
+    ]
+  }
+}

@@ -47,5 +47,12 @@
       300,
       170
     ]
-  ]
+  ],
+  "quiz": {
+    "count": 2,
+    "topics": [
+      "instruments",
+      "room"
+    ]
+  }
 }

@@ -1,0 +1,69 @@
+{
+  "name": "Night shift",
+  "time_limit_s": 45,
+  "start": [
+    80,
+    150
+  ],
+  "targets": [
+    {
+      "id": "bleeding_1",
+      "position": [
+        300,
+        470
+      ],
+      "needs": "clamp",
+      "timer_s": 15
+    },
+    {
+      "id": "glass",
+      "position": [
+        520,
+        150
+      ],
+      "needs": "forceps"
+    },
+    {
+      "id": "bleeding_2",
+      "position": [
+        740,
+        150
+      ],
+      "needs": "clamp",
+      "timer_s": 20
+    },
+    {
+      "id": "blood",
+      "position": [
+        740,
+        470
+      ],
+      "needs": "swab"
+    },
+    {
+      "id": "splinter",
+      "position": [
+        950,
+        200
+      ],
+      "needs": "forceps"
+    }
+  ],
+  "dark": [
+    [
+      370,
+      90,
+      300,
+      130
+    ],
+    [
+      590,
+      400,
+      300,
+      140
+    ]
+  ],
+  "quiz": {
+    "count": 3
+  }
+}

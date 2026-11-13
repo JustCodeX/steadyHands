@@ -31,5 +31,11 @@
       ],
       "needs": "forceps"
     }
-  ]
+  ],
+  "quiz": {
+    "count": 1,
+    "topics": [
+      "instruments"
+    ]
+  }
 }
