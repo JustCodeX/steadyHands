@@ -176,6 +176,7 @@ class TargetView:
     needs: str
     done: bool
     timer_left: float | None
+    timer_s: float | None = None  # full length of the timer, for the countdown ring
 
 
 @dataclass(kw_only=True)
@@ -204,3 +205,10 @@ class GameSnapshot(Event):
     menu_index: int
     result: RoundResult | None
     mcu_connected: bool
+    tools: tuple[str, ...] = ()  # every instrument, in knob order
+    hover_target: str = ""  # id of the target under the instrument
+    dwell: float = 0.0  # 0..1 progress of the hands-free grab
+    sensitivity: float = 1.0
+    sensitivity_range: tuple[float, float] = (0.3, 2.0)
+    tool_radius: int = 9
+    light_left: float = 0.0  # seconds of light remaining

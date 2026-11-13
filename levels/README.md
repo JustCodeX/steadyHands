@@ -15,7 +15,7 @@ levels/01-splinter/
 | Black (dark) | Wall: touching it counts as a contact |
 | White (light) | Corridor: the instrument can move here |
 
-Colliding with a wall is a pixel lookup in this image (`CollisionMap`). Keep the top 56 pixels black: the HUD covers them. Targets are not drawn in the mask; they come from `level.json`. The renderer recolours the mask (tissue and skin colours from `app/trainer/ui/theme.py`).
+Colliding with a wall is a pixel lookup in this image (`CollisionMap`). Keep the top 56 pixels black: the HUD covers them. Targets are not drawn in the mask; they come from `level.json`. The game paints the mask as a picture (`MapPainter`): the corridor becomes an open wound, the wall the skin around it (colours in `app/trainer/ui/theme.py`). Small decorations (a plaster, moles) are placed on free skin automatically.
 
 ## level.json
 
@@ -33,7 +33,7 @@ Colliding with a wall is a pixel lookup in this image (`CollisionMap`). Keep the
 ```
 
 - Coordinates are in pixels, measured from the top-left corner.
-- `needs` names the instrument that handles the target: `forceps`, `swab`, `clamp`, or `scalpel`. Hovering over a target with the right instrument for one second (or pressing A) applies it; the wrong instrument counts as a wrong call.
+- `needs` names the instrument that handles the target: `forceps`, `swab`, `clamp`, or `scalpel`. For `forceps` targets the `id` picks the picture: an id containing `splinter`, `shard`, `glass`, `needle` or `button` is drawn as that object. Hovering over a target with the right instrument for one second (or pressing A) applies it; the wrong instrument counts as a wrong call.
 - `timer_s` is optional; for bleeding, it is the time until the patient's state gets worse (one contact), and it restarts until the target is clamped.
-- `dark` is optional: rectangles `[x, y, w, h]` that are blacked out until someone calls `light`.
+- `dark` is optional: rectangles `[x, y, w, h]` that are blacked out until the player presses the knob (or calls `light`); the light stays on for a few seconds.
 - Level order is alphabetical by folder name; make them harder step by step (narrower corridors, less time).

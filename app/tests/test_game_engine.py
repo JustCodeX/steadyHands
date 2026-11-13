@@ -170,3 +170,72 @@ def test_metrics_steadiness():
     m2.end(48.0)
     r = m2.result("L", True)
     assert r.time_s == 48.0
+
+
+# --- controls without voice: knob and buttons --------------------------------
+
+
+def turn_knob(engine, position, buttons=0):
+    engine.on_input(InputFrame(knob=position, buttons=buttons))
+
+
+def test_knob_selects_the_tool_in_a_round(engine):
+    engine.start_round()
+    turn_knob(engine, 0)
+    assert engine.tool.word == "forceps"
+    turn_knob(engine, 1)
+    assert engine.tool.word == "swab"
+    turn_knob(engine, 3)  # two clicks between two frames: two tools on
+    assert engine.tool.word == "scalpel"
+    turn_knob(engine, 4)
+    assert engine.tool.word == "forceps"  # wraps around
+    turn_knob(engine, 3)
+    assert engine.tool.word == "scalpel"  # and backwards
+    assert engine.sensitivity == 1.0  # the knob no longer changes the speed while playing
+    assert engine.metrics.calls_correct == 0  # choosing by hand is not a voice call
+
+
+def test_knob_sets_the_speed_while_paused(engine):
+    engine.start_round()
+    turn_knob(engine, 0)
+    engine.pause()
+    turn_knob(engine, 5)
+    assert engine.sensitivity == pytest.approx(1.0 + 5 * engine.cfg.knob_sensitivity_per_step)
+    assert engine.tool.word == "forceps"
+    assert engine.snapshot().sensitivity == engine.sensitivity
+
+
+def test_knob_press_switches_on_the_light(engine):
+    engine.start_round()
+    turn_knob(engine, 0, buttons=InputFrame.BTN_KNOB)
+    assert "light" not in kinds(engine)  # this level has no dark zone
+    engine.level.dark_zones = [(0, 0, 50, 50)]
+    turn_knob(engine, 0)
+    turn_knob(engine, 0, buttons=InputFrame.BTN_KNOB)
+    assert "light" in kinds(engine)
+    snap = engine.snapshot()
+    assert snap.lit and snap.light_left > 0
+
+
+def test_snapshot_reports_hover_and_dwell(engine):
+    engine.start_round()
+    engine.x, engine.y = 160.0, 60.0  # over the bleeding, holding forceps
+    engine.tick(0.1)
+    snap = engine.snapshot()
+    assert snap.hover_target == "bleed" and snap.dwell == 0.0
+    assert snap.tools == ("forceps", "swab", "clamp", "scalpel")
+    engine.x, engine.y = 100.0, 60.0  # over the splinter: the right tool
+    engine.tick(0.1)
+    engine.tick(0.25)
+    snap = engine.snapshot()
+    assert snap.hover_target == "splinter" and 0.4 < snap.dwell < 0.6
+
+
+def test_winning_selects_the_next_level(engine):
+    engine.levels.names = lambda: ["one", "two", "three"]
+    engine.start_round(0)
+    for target in engine.level.targets:
+        target.done = True
+    engine.tick(0.1)
+    assert engine.state is GameState.RESULT
+    assert engine.snapshot().menu_index == 1

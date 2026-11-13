@@ -139,6 +139,8 @@ class GameEngine(Service):
         self._result = self.metrics.result(self.level.name, won)
         self._result_t = time.monotonic()
         self.state = GameState.RESULT
+        if won:  # the menu comes back with the next level selected
+            self._menu_index = (self._menu_index + 1) % max(1, len(self.levels.names()))
         self._set_listening(True)
         self.bus.publish(GameEvent(kind="win" if won else "lose"))
         self.bus.publish(self._result)
@@ -193,27 +195,38 @@ class GameEngine(Service):
                 self.toggle_mode()
         elif self.state is GameState.PLAYING:
             if knob_delta:
-                self.sensitivity = max(
-                    self.cfg.sensitivity_min,
-                    min(self.cfg.sensitivity_max, self.sensitivity + knob_delta * self.cfg.knob_sensitivity_per_step),
-                )
+                self._cycle_tool(knob_delta)  # one click of the knob is one tool
             if pressed & InputFrame.BTN_B:
                 self.pause()
             elif pressed & InputFrame.BTN_A:
                 self._try_grab(manual=True)
             elif pressed & InputFrame.BTN_C:
                 self._cycle_tool()
+            elif pressed & InputFrame.BTN_KNOB:
+                self._switch_on_light(time.monotonic())
         elif self.state is GameState.PAUSED:
+            if knob_delta:
+                self.sensitivity = max(
+                    self.cfg.sensitivity_min,
+                    min(self.cfg.sensitivity_max, self.sensitivity + knob_delta * self.cfg.knob_sensitivity_per_step),
+                )
             if pressed & InputFrame.BTN_B:
                 self.resume()
         elif self.state is GameState.RESULT:
             if pressed & InputFrame.BTN_A:
                 self.enter_menu()
 
-    def _cycle_tool(self) -> None:
-        """Button fallback for voice: cycle through the tools."""
+    def _cycle_tool(self, step: int = 1) -> None:
+        """Pick the next (or previous) tool by hand: knob turn or button C."""
         words = list(TOOL_WORDS)
-        self._set_tool(words[(words.index(self.tool.word) + 1) % len(words)], by_voice=False)
+        self._set_tool(words[(words.index(self.tool.word) + step) % len(words)], by_voice=False)
+
+    def _switch_on_light(self, now: float) -> None:
+        """Light up the dark zones for a while: knob press or the "light" command."""
+        if self.level is None or not self.level.dark_zones:
+            return
+        self.light_until = now + self.cfg.light_duration_s
+        self.bus.publish(GameEvent(kind="light"))
 
     # --- commands ------------------------------------------------------------
 
@@ -258,8 +271,7 @@ class GameEngine(Service):
             self.metrics.steady_uses += 1
             self.bus.publish(GameEvent(kind="steady"))
         elif word == "light":
-            self.light_until = now + self.cfg.light_duration_s
-            self.bus.publish(GameEvent(kind="light"))
+            self._switch_on_light(now)
 
     def on_misheard(self, ev: MisheardEvent) -> None:
         self.last_command = "?"
@@ -394,6 +406,9 @@ class GameEngine(Service):
     def snapshot(self) -> GameSnapshot:
         now = time.monotonic()
         level = self.level
+        in_round = level is not None and self.state in (GameState.PLAYING, GameState.PAUSED)
+        hover = self._target_under_tool() if in_round else None
+        dwell = self._dwell_elapsed / max(1e-6, self.cfg.grab_dwell_s) if self._dwell_target else 0.0
         return GameSnapshot(
             state=self.state,
             mode=self.mode.name,
@@ -403,7 +418,7 @@ class GameEngine(Service):
             y=self.y,
             tool=self.tool.word,
             targets=[
-                TargetView(id=t.id, x=t.x, y=t.y, needs=t.needs, done=t.done, timer_left=t.timer_left)
+                TargetView(id=t.id, x=t.x, y=t.y, needs=t.needs, done=t.done, timer_left=t.timer_left, timer_s=t.timer_s)
                 for t in (level.targets if level else [])
             ],
             time_left=max(0.0, self.time_left),
@@ -420,4 +435,11 @@ class GameEngine(Service):
             menu_index=self._menu_index,
             result=self._result,
             mcu_connected=self._mcu_connected,
+            tools=TOOL_WORDS,
+            hover_target=hover.id if hover else "",
+            dwell=min(1.0, dwell),
+            sensitivity=self.sensitivity,
+            sensitivity_range=(self.cfg.sensitivity_min, self.cfg.sensitivity_max),
+            tool_radius=self.cfg.tool_radius,
+            light_left=max(0.0, self.light_until - now),
         )

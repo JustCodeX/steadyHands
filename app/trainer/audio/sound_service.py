@@ -6,7 +6,7 @@ import logging
 import time
 from collections import deque
 
-from ..core.config import AudioConfig
+from ..core.config import AudioConfig, TOOL_WORDS
 from ..core.events import GameEvent, PlaybackFinished, PlaybackStarted, RoundResult
 from ..core.service import Service
 from .clip_library import ClipLibrary
@@ -116,6 +116,9 @@ class SoundService(Service):
         if ev.kind == "hit":
             self._variant += 1
         ids = self.phrases.for_event(ev.kind, ev.detail, self._variant)
+        if ev.kind == "tool_changed":
+            # Turning the knob passes several tools quickly: only announce the last one.
+            self._queue = deque(i for i in self._queue if i not in TOOL_WORDS)
         if ids:
             self.speak(ids, interrupt=ev.kind in URGENT)
 

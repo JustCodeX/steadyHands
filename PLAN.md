@@ -59,8 +59,8 @@ The surgeon holds the **instrument**, a handle containing the Modulino Movement,
 | Input | Action |
 | --- | --- |
 | Modulino Movement (in the instrument) | Tilt moves the tool tip |
-| Modulino Knob | Steering sensitivity; scrolls in menus |
-| Modulino Buttons A / B / C | A: grab or release · B: pause/menu (long press cycles tools as a voice fallback) · C: switch between one-player and co-op |
+| Modulino Knob | Menu: picks the level · Round: turn picks the instrument, press switches on the light in dark zones · Paused: steering sensitivity |
+| Modulino Buttons A / B / C | A: start, use the instrument · B: pause/continue · C: next instrument in a round; in the menu, switch between one-player and co-op |
 | Modulino Distance (optional, stretch) | Hand height sets depth: lower your hand to grab, raise it to travel |
 | Voice | Tool and room commands (see below) |
 

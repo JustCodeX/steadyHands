@@ -14,7 +14,8 @@ Every feature is a class derived from `Service`. Services are registered with `A
 | `trainer/audio/` | `lines.py` (every spoken line), `ClipLibrary`, `PhraseBuilder`, `SoundService`, `TtsRenderer` (setup only) |
 | `trainer/game/` | `GameEngine`, `GameState`, `SoloMode` / `CoopMode`, `Level` + `LevelCatalog`, `CollisionMap`, `Patient`, `TrainingMetrics` |
 | `trainer/game/instruments/` | `Instrument` and `Forceps`, `Swab`, `Clamp`, `Scalpel` |
-| `trainer/ui/` | `Renderer`, `Hud`, `ResultScreen`, `theme.py` |
+| `trainer/ui/` | `Renderer` (picks the screen), `MenuScreen`, `RoundView`, `Hud`, `PauseOverlay`, `ResultScreen`, `MapPainter` (level mask → wound picture), `Fonts`, `theme.py` |
+| `trainer/ui/art/` | Artwork drawn with code and cached: `InstrumentArt`, `TargetArt`, `PatientArt`, `Glyphs`, `Backdrop`, `canvas.py` (drawing helpers) |
 | `trainer/system/` | `PowerManager` (idle mode), `MetricsLogger` (latency, CPU, RAM per state → `logs/metrics.csv`) |
 | `tools/` | `make_levels.py`, `render_clips.py`, `bridge_probe.py`, `sync_to_board.sh` |
 | `setup/` | `board_setup.sh`, `download_models.sh` |
@@ -43,7 +44,9 @@ app/run.sh --windowed -v          # window, verbose log
 python -m trainer --no-mcu --no-voice --windowed   # on a laptop: keyboard only
 ```
 
-Keyboard: arrows tilt, Space = A (grab), M = B (pause), C = C (cycle tool), +/- knob, 1-4 call tools, S steady, X cancel, R repeat, H help, N new game, Esc quit.
+Controls without voice: tilt moves, the knob picks the instrument (while paused it sets the steering speed), a knob press switches on the light in dark zones, A uses the instrument, B pauses, C also steps to the next instrument.
+
+Keyboard: arrows tilt (Shift = slow), Space = A, M = B, C = C, +/- turn the knob, Enter presses it. As if spoken: 1-4 call tools, L light, S steady, X cancel, R repeat, H help, N new game. Esc quits.
 
 Settings: copy the defaults from `trainer/core/config.py` into a TOML file and pass `--config file.toml` (or set `STEADYHANDS_CONFIG`). Typical overrides: `voice.input_device = "USB"`, `audio.output_device`, `game.speed_px_per_s`, `voice.confidence_threshold`.
 

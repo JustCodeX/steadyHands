@@ -1,15 +1,14 @@
 """Draws the game on the display and turns pygame input into events.
 
-The level map is rendered once per level into a surface; each frame only
-redraws the moving parts over a copy, capped at `fps`.
+The Renderer only decides which screen to show; each screen is its own class
+(MenuScreen, RoundView + Hud, PauseOverlay, ResultScreen). Pictures are drawn
+once and cached, so a frame is a handful of blits, capped at `fps`.
 """
 from __future__ import annotations
 
 import logging
-import math
 import os
 import time
-from pathlib import Path
 
 import pygame
 
@@ -25,8 +24,18 @@ from ..core.events import (
 )
 from ..core.service import Service
 from . import theme
+from .art.backdrop import Backdrop
+from .art.glyphs import Glyphs
+from .art.instrument_art import InstrumentArt
+from .art.patient_art import PatientArt
+from .art.target_art import TargetArt
+from .fonts import Fonts
 from .hud import Hud
+from .map_painter import MapPainter
+from .menu_screen import MenuScreen
+from .pause_overlay import PauseOverlay
 from .result_screen import ResultScreen
+from .round_view import RoundView
 
 log = logging.getLogger(__name__)
 
@@ -41,11 +50,13 @@ class Renderer(Service):
         self.snapshot: GameSnapshot | None = None
         self.voice = VoiceState.OFF
         self.idle = False
-        self._map_cache: tuple[str, pygame.Surface] | None = None
         self._last_draw = 0.0
         self._frames = 0
-        self.font = self.small = self.big = None
+        self.fonts: Fonts | None = None
         self.hud: Hud | None = None
+        self.menu: MenuScreen | None = None
+        self.round_view: RoundView | None = None
+        self.pause_overlay: PauseOverlay | None = None
         self.result_screen: ResultScreen | None = None
         bus.subscribe(GameSnapshot, self._on_snapshot)
         bus.subscribe(VoiceStateChanged, self._on_voice)
@@ -62,11 +73,16 @@ class Renderer(Service):
         self.screen = pygame.display.set_mode((self.cfg.width, self.cfg.height), flags)
         pygame.display.set_caption("Steady Hands")
         pygame.mouse.set_visible(False)
-        self.font = pygame.font.Font(theme.FONT, 30)
-        self.small = pygame.font.Font(theme.FONT, 20)
-        self.big = pygame.font.Font(theme.FONT, 54)
-        self.hud = Hud(self.cfg.width, self.font, self.small)
-        self.result_screen = ResultScreen(self.cfg.width, self.cfg.height, self.big, self.font, self.small)
+        size = (self.cfg.width, self.cfg.height)
+        self.fonts = Fonts()
+        glyphs = Glyphs(self.fonts)
+        instruments, targets, patient = InstrumentArt(), TargetArt(), PatientArt()
+        backdrop = Backdrop(size)
+        self.hud = Hud(self.cfg.width, self.fonts, instruments, targets, patient, glyphs)
+        self.menu = MenuScreen(size, self.fonts, backdrop, patient, glyphs)
+        self.round_view = RoundView(size, self.fonts, MapPainter(size), instruments, targets, glyphs)
+        self.pause_overlay = PauseOverlay(size, self.fonts, glyphs)
+        self.result_screen = ResultScreen(size, self.fonts, backdrop, patient, glyphs)
         log.info("display %dx%d fullscreen=%s driver=%s", self.cfg.width, self.cfg.height, self.cfg.fullscreen, pygame.display.get_driver())
 
     def stop(self) -> None:
@@ -113,100 +129,24 @@ class Renderer(Service):
             self.screen.fill(theme.DARK)
             return
         if snap.state is GameState.MENU:
-            self._draw_menu(snap)
+            self.menu.draw(self.screen, snap, now)
+            if self.voice is not VoiceState.OFF:
+                self.hud.mic_icon(self.screen, self.cfg.width - 40, 30, self.voice, now)
         elif snap.state is GameState.RESULT and snap.result is not None:
             self.result_screen.draw(self.screen, snap.result)
         else:
-            self._draw_round(snap, now)
+            self.round_view.draw(self.screen, snap, now)
+            self.hud.draw(self.screen, snap, self.voice, now, shaken=self.round_view.hit_recently(now))
+            if snap.message:
+                self._toast(snap.message)
             if snap.state is GameState.PAUSED:
-                self._overlay("Paused", 'Press B or say "continue"')
+                self.pause_overlay.draw(self.screen, snap)
 
-    def _draw_menu(self, snap: GameSnapshot) -> None:
-        s = self.screen
-        s.fill(theme.BG)
-        title = self.big.render("Steady Hands", True, theme.TEXT)
-        s.blit(title, ((self.cfg.width - title.get_width()) // 2, 70))
-        sub = self.small.render("Surgeon trainer  -  tilt the instrument, call for tools by voice", True, theme.MUTED)
-        s.blit(sub, ((self.cfg.width - sub.get_width()) // 2, 140))
-        y = 220
-        if not snap.menu_levels:
-            s.blit(self.font.render("No levels found in levels/", True, theme.BAD), (200, y))
-        for i, name in enumerate(snap.menu_levels):
-            sel = i == snap.menu_index
-            colour = theme.ACCENT if sel else theme.TEXT
-            prefix = ">  " if sel else "    "
-            s.blit(self.font.render(prefix + name, True, colour), (self.cfg.width // 2 - 200, y))
-            y += 46
-        mode = self.font.render(f"Mode: {snap.mode}   (press C to switch)", True, theme.MUTED)
-        s.blit(mode, ((self.cfg.width - mode.get_width()) // 2, self.cfg.height - 130))
-        hint = self.small.render('Turn the knob to pick a level.  Press A or say "new game" to start.', True, theme.MUTED)
-        s.blit(hint, ((self.cfg.width - hint.get_width()) // 2, self.cfg.height - 80))
-        if not snap.mcu_connected:
-            warn = self.small.render("MCU not connected: keyboard only (arrows, space, 1-4)", True, theme.WARN)
-            s.blit(warn, ((self.cfg.width - warn.get_width()) // 2, self.cfg.height - 45))
-        self.hud.mic_icon(s, self.cfg.width - 40, 30, self.voice, time.monotonic())
-        if snap.message:
-            msg = self.font.render(snap.message, True, theme.WARN)
-            s.blit(msg, ((self.cfg.width - msg.get_width()) // 2, 180))
-
-    def _draw_round(self, snap: GameSnapshot, now: float) -> None:
-        s = self.screen
-        s.blit(self._map_surface(snap.level_dir), (0, 0))
-        # targets
-        for t in snap.targets:
-            if t.done:
-                continue
-            colour = theme.TARGET_COLOURS.get(t.needs, theme.TEXT)
-            r = 16 + (3 if int(now * 2) % 2 == 0 else 0)
-            pygame.draw.circle(s, colour, (t.x, t.y), r)
-            pygame.draw.circle(s, theme.BG, (t.x, t.y), r, 2)
-            letter = self.small.render(theme.TOOL_LETTERS.get(t.needs, "?"), True, theme.BG)
-            s.blit(letter, (t.x - letter.get_width() // 2, t.y - letter.get_height() // 2))
-            if t.timer_left is not None:
-                frac = max(0.0, min(1.0, t.timer_left / 15.0))
-                pygame.draw.arc(s, theme.BAD, (t.x - 24, t.y - 24, 48, 48), 0, 2 * math.pi * frac, 4)
-        # dark zones hide targets until "light" is called; the tool stays visible
-        if snap.dark_zones and not snap.lit:
-            for (x, y, w, h) in snap.dark_zones:
-                pygame.draw.rect(s, theme.DARK, (x, y, w, h))
-        # tool
-        tool_colour = theme.TOOL_STEADY if snap.steady else theme.TOOL
-        x, y = int(snap.x), int(snap.y)
-        pygame.draw.circle(s, tool_colour, (x, y), 9)
-        pygame.draw.circle(s, theme.TARGET_COLOURS.get(snap.tool, theme.TEXT), (x, y), 5)
-        pygame.draw.line(s, tool_colour, (x, y - 14), (x, y - 40), 3)  # the handle
-        self.hud.draw(s, snap, self.voice, now)
-        if snap.message:
-            msg = self.font.render(snap.message, True, theme.WARN)
-            s.blit(msg, ((self.cfg.width - msg.get_width()) // 2, theme.HUD_HEIGHT + 10))
-
-    def _overlay(self, title: str, hint: str) -> None:
-        s = self.screen
-        shade = pygame.Surface((self.cfg.width, self.cfg.height), pygame.SRCALPHA)
-        shade.fill((0, 0, 0, 160))
-        s.blit(shade, (0, 0))
-        t = self.big.render(title, True, theme.TEXT)
-        s.blit(t, ((self.cfg.width - t.get_width()) // 2, self.cfg.height // 2 - 60))
-        h = self.small.render(hint, True, theme.MUTED)
-        s.blit(h, ((self.cfg.width - h.get_width()) // 2, self.cfg.height // 2 + 10))
-
-    def _map_surface(self, level_dir: str) -> pygame.Surface:
-        if self._map_cache and self._map_cache[0] == level_dir:
-            return self._map_cache[1]
-        surface = pygame.Surface((self.cfg.width, self.cfg.height))
-        surface.fill(theme.WALL)
-        mask_path = Path(level_dir) / "mask.png" if level_dir else None
-        if mask_path and mask_path.is_file():
-            mask = pygame.image.load(str(mask_path)).convert()
-            # Recolour: dark = wall (tissue), light = corridor (skin).
-            px = pygame.PixelArray(mask)
-            wall = mask.map_rgb((0, 0, 0))
-            corridor = mask.map_rgb((255, 255, 255))
-            px.replace(wall, surface.map_rgb(theme.WALL), distance=0.4)
-            px.replace(corridor, surface.map_rgb(theme.CORRIDOR), distance=0.4)
-            del px
-            surface.blit(mask, (0, 0))
-        else:
-            surface.fill(theme.CORRIDOR)
-        self._map_cache = (level_dir, surface)
-        return surface
+    def _toast(self, message: str) -> None:
+        """A short message from the game, under the HUD."""
+        text = self.fonts.text("head", message, theme.TEXT)
+        box = text.get_rect().inflate(44, 18)
+        box.midtop = (self.cfg.width // 2, theme.HUD_HEIGHT + 12)
+        pygame.draw.rect(self.screen, theme.PANEL, box, border_radius=18)
+        pygame.draw.rect(self.screen, theme.WARN, box, 3, border_radius=18)
+        self.screen.blit(text, text.get_rect(center=box.center))
