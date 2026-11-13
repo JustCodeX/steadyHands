@@ -7,3 +7,12 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+
+# Models are downloaded by setup scripts; voice recordings never go in git
+models/
+recordings/
+*.onnx
+
+# Python
+__pycache__/
+.venv/
