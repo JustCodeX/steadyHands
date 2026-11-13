@@ -7,7 +7,7 @@ namespace cfg {
 
 // --- Pins (UNO Q header numbering) ---
 constexpr uint8_t PIN_RED_LED = 6;  // D6 via 330 ohm
-constexpr uint8_t PIN_HORN = 9;     // D9 via NPN driver
+constexpr uint8_t PIN_HORN = 10;    // D10 via NPN driver
 
 // --- Horn ---
 // false: active buzzer, switched on/off. true: passive piezo, driven with tone().
