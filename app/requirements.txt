@@ -1,0 +1,7 @@
+# Runtime, on the UNO Q (Python 3.13, aarch64). pygame and numpy may also come from apt.
+arduino-router-bridge>=0.5.1
+msgpack>=1.0
+numpy>=1.26
+pygame>=2.6
+sounddevice>=0.5
+vosk>=0.3.45

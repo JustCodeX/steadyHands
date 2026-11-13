@@ -1,0 +1,51 @@
+{
+  "name": "Deep cut",
+  "time_limit_s": 50,
+  "start": [
+    80,
+    150
+  ],
+  "targets": [
+    {
+      "id": "bleeding_1",
+      "position": [
+        400,
+        220
+      ],
+      "needs": "clamp",
+      "timer_s": 18
+    },
+    {
+      "id": "blood",
+      "position": [
+        600,
+        480
+      ],
+      "needs": "swab"
+    },
+    {
+      "id": "glass",
+      "position": [
+        940,
+        160
+      ],
+      "needs": "forceps"
+    },
+    {
+      "id": "needle",
+      "position": [
+        940,
+        420
+      ],
+      "needs": "forceps"
+    }
+  ],
+  "dark": [
+    [
+      560,
+      400,
+      300,
+      170
+    ]
+  ]
+}

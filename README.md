@@ -10,7 +10,9 @@ You guide a surgical instrument through a patient map on a 7-inch screen by tilt
 | --- | --- |
 | [PLAN.md](PLAN.md) | Idea, decisions, architecture, interfaces, work split, milestones, risks |
 | [WIRING.md](WIRING.md) | Parts list, wiring, pin assignment, power, energy measurement |
-| [firmware/README.md](firmware/README.md) | MCU sketch with PlatformIO: build, flash, one-time setup on each board |
+| [firmware/README.md](firmware/README.md) | MCU sketch with PlatformIO: build, flash, Bridge interface, one-time setup on each board |
+| [app/README.md](app/README.md) | Linux app: structure, setup on the board, running, tests |
+| [levels/README.md](levels/README.md) | Level format (mask PNG + JSON) |
 
 ## Hardware
 
@@ -86,16 +88,16 @@ Full class diagrams, design rules, and how to add a feature: [PLAN.md](PLAN.md#c
 
 ## Status
 
-Planning (13 November). Decided: a surgeon-training prototype for medical students; English; one-player mode with optional co-op; mic listening during play.
+Code skeleton built (13 November, afternoon): the MCU firmware (all modules, Bridge link) and the Linux app (game, display, voice pipeline, sound, idle mode, metrics) exist and pass their tests. Decided: a surgeon-training prototype for medical students; English; one-player mode with optional co-op; mic listening during play; Vosk for speech-to-text (D2).
 
-**Definition of done:** the project is finished only when every hackathon criterion in the [criteria check](PLAN.md#hackathon-criteria-check) is verified on the real board. Still open: toolchain (D1) and speech-to-text engine (D2); see [PLAN.md](PLAN.md#decisions).
-
-The MCU toolchain works: the starter sketch builds and flashes with PlatformIO on the board.
+**Definition of done:** the project is finished only when every hackathon criterion in the [criteria check](PLAN.md#hackathon-criteria-check) is verified on the real board. See [PLAN.md](PLAN.md#decisions) for open questions.
 
 ```sh
-cd firmware
-tools/board.sh upload    # build and flash over USB
-tools/board.sh monitor   # Serial output
+cd firmware && tools/board.sh upload        # build and flash the MCU over USB
+app/tools/sync_to_board.sh                  # copy app/ and levels/ to the board
+app/setup/board_setup.sh                    # on the board, once: packages, models, clips
+app/run.sh                                  # on the board: start the trainer
+cd app && python -m pytest                  # tests, on any computer
 ```
 
 ## Working together

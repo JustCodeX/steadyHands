@@ -1,31 +1,18 @@
-# Firmware modules
+# Firmware libraries
 
-Each hardware module is its own PlatformIO library in its own folder, so features stay separate and can be added one at a time. PlatformIO finds them automatically.
+One PlatformIO library per class, as in [PLAN.md](../../PLAN.md#firmware-mcu-c-platformio). Every class lives in the `sh` namespace (the Modulino library already has a global `Module`).
 
-```
-lib/<Name>/<Name>.h
-lib/<Name>/<Name>.cpp
-```
-
-## Planned modules
-
-| Library | Classes | Role |
+| Folder | Class | Job |
 | --- | --- | --- |
-| `Core` | `Module`, `InputSource`, `InputFrame`, `Firmware`, `LowPassFilter` | Interfaces, the shared input frame, the loop that updates all modules |
-| `TiltSensor` | `TiltSensor` | Modulino Movement: filtered tilt |
-| `KnobInput` | `KnobInput` | Modulino Knob |
-| `ButtonPanel` | `ButtonPanel` | Modulino Buttons and their LEDs |
-| `DistanceSensor` | `DistanceSensor` | Modulino Distance (optional) |
-| `Alarm` | `Alarm` | Horn and red LED, timed without blocking |
-| `StatusLed` | `StatusLed` | Voice state on the on-board RGB LED 4 |
-| `BridgeLink` | `BridgeLink` | Sends `InputFrame` to Linux; receives `alarm`, `leds`, `voice_state` |
+| `Core/` | `Module`, `InputSource`, `InputFrame`, `Firmware`, `LowPassFilter`, `Config.h` | Interfaces, the frame, the module list, the filter, every tunable |
+| `TiltSensor/` | `TiltSensor` | Modulino Movement in the instrument, filtered tilt |
+| `KnobInput/` | `KnobInput` | Modulino Knob position and button |
+| `ButtonPanel/` | `ButtonPanel` | Modulino Buttons A/B/C and their LEDs |
+| `DistanceSensor/` | `DistanceSensor` | Modulino Distance (optional) |
+| `Alarm/` | `Alarm` | Horn and red LED |
+| `StatusLed/` | `StatusLed` | On-board RGB LED 4 for the voice state |
+| `BridgeLink/` | `BridgeLink` | Frames to Linux, commands from Linux |
 
-## Adding a module
+**Third-party libraries are not vendored here.** The `arduinoq` PlatformIO platform installs its own patched `Arduino_RouterBridge`, `Arduino_RPClite` and `MsgPack` into `.pio/libdeps/` on every build, and the Modulino libraries come from the registry via `platformio.ini`. A copy of `DebugLog` in `lib/` would shadow the core's no-op shim and break the build.
 
-1. Create `lib/<Name>/` with a class that derives from `Module`, or from `InputSource` for inputs.
-2. For an input, add its field to `InputFrame`.
-3. Construct the module in `src/main.cpp` and register it with `firmware.add(...)`.
-
-Never use `delay()` in a module; use `update(nowMs)` instead, so the loop is never blocked.
-
-Class diagram: [PLAN.md](../../PLAN.md#firmware-mcu-c-platformio).
+Missing Modulinos are not fatal: a module reports "not found" and retries every 2 s, so you can plug the chain in after boot (power off first, see WIRING.md).

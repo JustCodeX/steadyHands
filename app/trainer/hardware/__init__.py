@@ -1,4 +1,1 @@
-"""Hardware: McuLink, the Bridge client that exchanges InputFrame and commands with the MCU.
-
-See PLAN.md, section "Code design", for the class diagrams.
-"""
+"""Input and output hardware: the MCU link over the Bridge, and the keyboard for development."""

@@ -1,4 +1,1 @@
-"""Voice pipeline: AudioInput, SignalProcessor, VoiceActivityDetector, SpeechRecognizer (abstract) with WhistleRecognizer and VoskRecognizer, CommandMatcher, VoiceService.
-
-See PLAN.md, section "Code design", for the class diagrams.
-"""
+"""Microphone, signal processing, voice activity detection, speech-to-text, command matching."""

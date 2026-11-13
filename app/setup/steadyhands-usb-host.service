@@ -1,0 +1,11 @@
+[Unit]
+Description=Keep the UNO Q USB-C port in host mode for the hub (Steady Hands)
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/steadyhands-usb-host.sh
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

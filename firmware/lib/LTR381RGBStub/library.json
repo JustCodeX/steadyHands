@@ -1,0 +1,7 @@
+{
+  "name": "LTR381RGBStub",
+  "version": "0.1.0",
+  "description": "Stub for Arduino_LTR381RGB so that Modulino.h compiles without the light-sensor library",
+  "frameworks": "arduino",
+  "platforms": "*"
+}

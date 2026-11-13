@@ -1,0 +1,7 @@
+{
+  "name": "Core",
+  "version": "0.1.0",
+  "description": "Module and InputSource interfaces, InputFrame, Firmware, LowPassFilter, Config",
+  "frameworks": "*",
+  "platforms": "*"
+}

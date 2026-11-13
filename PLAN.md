@@ -35,7 +35,7 @@ A working prototype of a surgeon trainer: you guide a surgical instrument throug
 | ✅ Energy measurement | PeakTech digital multimeter (see [WIRING.md](WIRING.md#energy-measurement-with-the-peaktech)) |
 | ✅ D1 Toolchain | PlatformIO for the MCU sketch, plus a standalone Python app on the Linux side (see [D1](#d1-toolchain-platformio)) |
 | ✅ Code style | Object-oriented and modular: every feature is a class behind an interface (see [Code design](#code-design)) |
-| ❓ D2 Speech-to-text | Whistle or Vosk, chosen after the M0 test (see [Speech pipeline](#speech-pipeline)) |
+| ❓ D2 Speech-to-text | Timon decides (model deployment and ASR choice are his area). The code ships `VoskRecognizer` (Vosk small English, vocabulary restricted to our commands: aarch64 wheel, 40 MB model) as the working default; any other engine is a further `SpeechRecognizer` subclass selected in the config (see [Speech pipeline](#speech-pipeline)) |
 | ✅ Purpose | Working prototype of a surgeon trainer, inspired by Dr. Bibber |
 | ❓ D3 Name | "Steady Hands" is a placeholder |
 | ❓ D4 Audio for the audience | Headset audio only reaches the person wearing it. Does the display have an audio jack, or can we get a USB speaker? |
@@ -59,8 +59,8 @@ The surgeon holds the **instrument**, a handle containing the Modulino Movement,
 | Input | Action |
 | --- | --- |
 | Modulino Movement (in the instrument) | Tilt moves the tool tip |
-| Modulino Knob | Steering sensitivity; scrolls in menus |
-| Modulino Buttons A / B / C | A: grab or release · B: pause/menu (long press cycles tools as a voice fallback) · C: switch between one-player and co-op |
+| Modulino Knob | Menu: picks the level · Round: turn picks the instrument, press switches on the light in dark zones · Paused: steering sensitivity |
+| Modulino Buttons A / B / C | A: start, use the instrument · B: pause/continue · C: next instrument in a round; in the menu, switch between one-player and co-op |
 | Modulino Distance (optional, stretch) | Hand height sets depth: lower your hand to grab, raise it to travel |
 | Voice | Tool and room commands (see below) |
 
@@ -152,7 +152,7 @@ Inside Linux, between the voice service and the game:
 ### D1 Toolchain: PlatformIO
 
 - **MCU:** the sketch in `firmware/` is built and flashed with PlatformIO, through `firmware/tools/board.sh` on the board's Linux side. This already works.
-- **Linux side:** a standalone Python app in `app/`. Our class `McuLink` talks to the MCU over the Bridge (the board's router socket). It replaces App Lab's Bridge library.
+- **Linux side:** a standalone Python app in `app/`. Our class `McuLink` talks to the MCU through the `arduino-router-bridge` package (pure Python, on PyPI) over the board's router socket, so no App Lab container is needed.
 - **Organiser examples:** we port Whistle speech-to-text into our app as a `SpeechRecognizer` subclass.
 - ⚠ **Do not start App Lab apps on the board.** When an App Lab app starts, App Lab flashes its own sketch and overwrites ours. `tools/board.sh upload` puts ours back.
 - If the Bridge or Modulino library does not work with PlatformIO, see [Risks and fallbacks](#risks-and-fallbacks).
@@ -408,9 +408,7 @@ The events on the bus are the interface tables above, written as classes: `Input
 1. **Mic:** headset, 16 kHz mono, read only while a round runs.
 2. **Signal processing:** a high-pass filter (removes rumble below about 100 Hz) and level normalisation, so that quiet and loud speakers are handled the same way.
 3. **Gate:** voice activity detection (Silero VAD or WebRTC VAD). Speech-to-text runs only on detected speech segments.
-4. **Speech-to-text (❓ D2):** we test both options in M0 on 20 spoken commands with real hall noise, then pick one.
-   - **Whistle** (Cactus Compute; 16.9 MB model; 7 languages). The workshop shows it running on the UNO Q's Linux side, and the slides link the project. It transcribes freely, and we match the text against the command list.
-   - **Vosk small English** with its vocabulary restricted to our commands. Restricting the vocabulary makes recognition more robust, and the model is small.
+4. **Speech-to-text (❓ D2, Timon):** the default in the code is `VoskRecognizer` (Vosk small English with its vocabulary restricted to our command phrases). Restricting the vocabulary makes recognition more robust, and the model is small. Alternatives (Whistle, Whisper tiny) are further `SpeechRecognizer` subclasses, selected with `voice.recognizer` in the config. Whatever is chosen gets measured in M0 on 20 spoken commands with real hall noise.
 5. **Response:** every recognised command appears on screen. Target: under 1 s from the end of a word to the tool change (to be measured).
 6. **Text-to-speech:** Piper with an English voice. We render all patient lines to WAV once at setup, so the game only plays files and there is no speech synthesis during play.
 7. **Privacy and security:**
@@ -540,7 +538,7 @@ Event end: 14 November, 12:00. The exact build cutoff is not published; ask the 
 | Risk | Fallback |
 | --- | --- |
 | Speech recognition unreliable in hall noise | Headset mic close to the mouth; restricted vocabulary (Vosk); every command visible on screen; button fallback for tools |
-| Bridge or Modulino library does not work with PlatformIO | Test both in M0. Modulino: read the sensors over `Wire1` directly. Bridge: send the frames as text lines over the Serial monitor channel (port 7500 on the board). |
+| Bridge or Modulino library does not work with PlatformIO | Resolved: both compile with the `arduinoq` platform (it ships a patched RouterBridge; see `firmware/platformio.ini` for the include-path detail). Fallbacks if the link misbehaves: read the sensors over `Wire1` directly; send frames as text lines over the monitor channel (port 7500). |
 | Python rendering too slow on the board | Lower resolution or fps; redraw only the parts that change |
 | Hub cannot power the display and headset | Separate 5 V USB charger for the display |
 | Horn needs more than 5 V or too much current | Driver with a MOSFET, or replace it with a 5 V buzzer (see [WIRING.md](WIRING.md#horn)) |
@@ -561,7 +559,7 @@ Sources: the event constraints and our proposed team requirements from the hacka
 | E1 | Local AI speech prototype on the UNO Q | Speech-to-text, game, and speech output run on the UNO Q | Demo runs with the board as the only computer | ⬜ |
 | E2 | Working prototype and live demo after 24 hours | Milestones M0–M3, [demo script](#demo-script-2-minutes) | Demo run at the event | ⬜ |
 | E3 | Team of four | Four work areas, which can be merged if fewer people work on them | [Work split](#work-split) assigned | ⬜ |
-| E4 | Uses the event's topics | Signal processing (high-pass filter, VAD), speech-to-text, speech output | Pipeline runs on the board | ⬜ |
+| E4 | Uses the event's topics | Signal processing (high-pass filter, VAD), speech-to-text, speech output | Pipeline runs on the board | 🟡 |
 | C1 | Runs on the UNO Q within 4 GB RAM | [Memory budget](#memory-budget) with at least 1 GB free | `free -m` per state | ⬜ |
 | C2 | Voice captured, processed, and synthesised locally; no audio leaves the device or is stored | Audio only in memory; no cloud; no network during play | No audio files on disk after a session; demo with Wi-Fi off | ⬜ |
 | C3 | Energy-aware: measure and minimise | VAD gating, pre-rendered speech, idle mode, no LLM ([Energy](#energy-and-environment)) | Power per state, energy per round, and the saving from VAD, all measured | ⬜ |
@@ -581,11 +579,11 @@ Sources: the event constraints and our proposed team requirements from the hacka
 
 | ID | Requirement | How we meet it | Evidence for ✅ | Status |
 | --- | --- | --- | --- | --- |
-| P1 | Spoken input with a meaningful spoken response | Patient reactions, `help`, spoken round result | Demo round | ⬜ |
+| P1 | Spoken input with a meaningful spoken response | Patient reactions, `help`, spoken round result | Demo round | 🟡 |
 | P2 | One end-to-end task, done reliably | One-player round from start to feedback | 10 runs in a row without a restart | ⬜ |
-| P3 | Help, repeat, cancel | [Voice commands](#voice-commands) `help`, `repeat`, `cancel` | Each tested 5 times | ⬜ |
-| P4 | Listening, processing, and speaking states visible | Microphone icon on screen, on-board RGB LED 4 ([Speech interaction](#speech-interaction)) | Every state seen in a demo round | ⬜ |
-| P5 | Graceful recovery from misheard speech | Confidence threshold, "Pardon?", hint with fitting commands, `cancel`, button fallback | Test with wrong and unclear words | ⬜ |
+| P3 | Help, repeat, cancel | [Voice commands](#voice-commands) `help`, `repeat`, `cancel` | Each tested 5 times | 🟡 |
+| P4 | Listening, processing, and speaking states visible | Microphone icon on screen, on-board RGB LED 4 ([Speech interaction](#speech-interaction)) | Every state seen in a demo round | 🟡 |
+| P5 | Graceful recovery from misheard speech | Confidence threshold, "Pardon?", hint with fitting commands, `cancel`, button fallback | Test with wrong and unclear words | 🟡 |
 | P6 | Response within 3–5 s after speech ends | Target under 1 s; pre-rendered replies | Median and worst value over 20 tries | ⬜ |
 | P7 | Local within 4 GB RAM; no stored audio; no cloud | Covered by C1 and C2 | Evidence from C1 and C2 | ⬜ |
 | P8 | Available peripherals and open-source components; latency and energy measured | Modulinos, headset, display; open models; measurement plan | Measured values in the README | ⬜ |
@@ -596,7 +594,7 @@ Sources: the event constraints and our proposed team requirements from the hacka
 | --- | --- | --- | --- | --- |
 | T1 | Feasible for four people in 24 hours, in parallel areas with clear interfaces | [Work split](#work-split) and [interface tables](#interfaces-agree-on-these-first-so-we-can-work-in-parallel) | Interfaces agreed at M0 | ⬜ |
 | T2 | Value and a clear success visible in two minutes | [Demo script](#demo-script-2-minutes) | Rehearsed run under 2:00 | ⬜ |
-| T3 | Minimum version without an unrestricted LLM | No LLM at all; patient lines are scripted | No LLM in the code | ⬜ |
+| T3 | Minimum version without an unrestricted LLM | No LLM at all; patient lines are scripted | No LLM in the code | 🟡 |
 | T4 | Optional features only after the core works | Core-first rule in the [milestones](#milestones) | Optional work starts only after M1 | ⬜ |
 | T5 | First milestone: spoken input gives a local spoken response on the board; then measure latency | M0 | Test log with latency | ⬜ |
 
