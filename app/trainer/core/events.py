@@ -106,6 +106,20 @@ class VoiceStateChanged(Event):
 
 
 @dataclass(kw_only=True)
+class AsrDebugEvent(Event):
+    """Debug only: what the recogniser heard, for the on-screen ASR panel.
+
+    Published only with `voice.debug_asr = true` — the one deliberate
+    exception to the "never transcripts" rule above, for testing.
+    """
+
+    text: str
+    confidence: float = 0.0
+    outcome: str = "partial"  # "partial" | "command" | "low_confidence" | "no_match" | "empty"
+    word: str = ""  # the matched command, if any
+
+
+@dataclass(kw_only=True)
 class ListenRequest(Event):
     """Game -> voice: listen only while a round runs."""
 

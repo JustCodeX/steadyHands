@@ -47,7 +47,8 @@ class PowerManager(Service):
         self._idle = idle
         log.info("idle %s", "on" if idle else "off")
         self.bus.publish(IdleChanged(idle=idle))
-        self._display_power(not idle)
+        if self.cfg.display_dpms:
+            self._display_power(not idle)
 
     def _display_power(self, on: bool) -> None:
         xset = shutil.which("xset")

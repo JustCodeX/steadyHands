@@ -9,12 +9,14 @@ import logging
 import math
 import os
 import time
+from collections import deque
 from pathlib import Path
 
 import pygame
 
 from ..core.config import DisplayConfig
 from ..core.events import (
+    AsrDebugEvent,
     GameSnapshot,
     GameState,
     IdleChanged,
@@ -47,9 +49,13 @@ class Renderer(Service):
         self.font = self.small = self.big = None
         self.hud: Hud | None = None
         self.result_screen: ResultScreen | None = None
+        self.asr_partial = ""
+        self.asr_log: deque[AsrDebugEvent] = deque(maxlen=8)
+        self._asr_panel_on = False
         bus.subscribe(GameSnapshot, self._on_snapshot)
         bus.subscribe(VoiceStateChanged, self._on_voice)
         bus.subscribe(IdleChanged, self._on_idle)
+        bus.subscribe(AsrDebugEvent, self._on_asr_debug)
 
     # --- lifecycle -----------------------------------------------------------
 
@@ -104,6 +110,14 @@ class Renderer(Service):
     def _on_idle(self, ev: IdleChanged) -> None:
         self.idle = ev.idle
 
+    def _on_asr_debug(self, ev: AsrDebugEvent) -> None:
+        self._asr_panel_on = True
+        if ev.outcome == "partial":
+            self.asr_partial = ev.text
+        else:
+            self.asr_partial = ""
+            self.asr_log.appendleft(ev)
+
     # --- drawing -------------------------------------------------------------
 
     def draw(self, now: float) -> None:
@@ -120,6 +134,8 @@ class Renderer(Service):
             self._draw_round(snap, now)
             if snap.state is GameState.PAUSED:
                 self._overlay("Paused", 'Press B or say "continue"')
+        if self._asr_panel_on:
+            self._draw_asr_panel()
 
     def _draw_menu(self, snap: GameSnapshot) -> None:
         s = self.screen
@@ -179,6 +195,47 @@ class Renderer(Service):
         if snap.message:
             msg = self.font.render(snap.message, True, theme.WARN)
             s.blit(msg, ((self.cfg.width - msg.get_width()) // 2, theme.HUD_HEIGHT + 10))
+
+    # ASR debug side panel (voice.debug_asr): live transcripts on the left edge.
+
+    ASR_PANEL_W = 300
+    ASR_OUTCOME_COLOURS = {
+        "command": theme.GOOD,
+        "low_confidence": theme.WARN,
+        "no_match": theme.MUTED,
+        "empty": theme.MUTED,
+    }
+
+    def _draw_asr_panel(self) -> None:
+        s = self.screen
+        w = self.ASR_PANEL_W
+        panel = pygame.Surface((w, self.cfg.height), pygame.SRCALPHA)
+        panel.fill((0, 0, 0, 175))
+        s.blit(panel, (0, 0))
+        pygame.draw.line(s, theme.MUTED, (w - 1, 0), (w - 1, self.cfg.height))
+        x, y = 12, 10
+        colour = theme.MIC_COLOURS.get(self.voice.name, theme.MUTED)
+        s.blit(self.small.render(f"ASR debug  ·  {self.voice.name}", True, colour), (x, y))
+        y += 32
+        live = "> " + self.asr_partial if self.asr_partial else ("> ..." if self.voice is VoiceState.PROCESSING else ">")
+        s.blit(self.small.render(self._fit(live, self.small, w - 2 * x), True, theme.WARN), (x, y))
+        y += 34
+        for e in self.asr_log:
+            text = e.text if e.text else "(silence)"
+            s.blit(self.small.render(self._fit(text, self.small, w - 2 * x), True, theme.TEXT), (x, y))
+            y += 24
+            tag = e.outcome + (f" -> {e.word}" if e.word else "") + (f"  {e.confidence:.2f}" if e.confidence else "")
+            colour = self.ASR_OUTCOME_COLOURS.get(e.outcome, theme.MUTED)
+            s.blit(self.small.render(self._fit(tag, self.small, w - 2 * x), True, colour), (x, y))
+            y += 32
+            if y > self.cfg.height - 56:
+                break
+
+    @staticmethod
+    def _fit(text: str, font: pygame.font.Font, width: int) -> str:
+        while text and font.size(text)[0] > width:
+            text = text[:-1]
+        return text
 
     def _overlay(self, title: str, hint: str) -> None:
         s = self.screen

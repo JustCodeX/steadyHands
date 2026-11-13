@@ -78,8 +78,12 @@ class VoiceConfig:
     vad_min_rms: float = 0.01
     vad_start_ms: int = 60
     vad_hangover_ms: int = 400
+    # Fed to the recogniser before the segment: the quiet word onset ("f" in
+    # "forceps") that the VAD needs vad_start_ms to react to would be lost.
+    vad_preroll_ms: int = 250
     max_segment_s: float = 3.0
     confidence_threshold: float = 0.6
+    debug_asr: bool = False  # on-screen side panel with everything the recogniser hears
 
 
 @dataclass
@@ -103,6 +107,11 @@ class McuConfig:
 @dataclass
 class SystemConfig:
     idle_timeout_s: float = 60.0
+    # DPMS-off cuts the panel's power; its inrush on wake browns out the USB hub
+    # and drops the headset (measured 13 Nov). The renderer already paints the
+    # screen black while idle, so this stays off unless a separate supply feeds
+    # the display.
+    display_dpms: bool = False
     display_name: str = ":0"
     metrics_log: str = str(APP_DIR / "logs" / "metrics.csv")
     sample_interval_s: float = 5.0
