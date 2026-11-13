@@ -69,12 +69,16 @@ class ResultScreen:
             rows.insert(3, ("Instruments called by voice", str(result.calls_correct)))
         if result.steady_uses:
             rows.append(("Precision help (steady)", str(result.steady_uses)))
+        asked = result.questions_correct + result.questions_wrong
+        if asked:
+            rows.insert(2, ("Questions answered right", f"{result.questions_correct} / {asked}"))
         left, right, y = card.x + 268, card.right - 44, card.y + 112
+        step = min(46, 252 // len(rows))  # more rows move closer together to stay on the card
         for label, value in rows:
             self.fonts.draw(surface, "body", label, theme.INK, (left, y))
             self.fonts.draw(surface, "head", value, theme.INK, (right, y - 4), anchor="topright")
-            pygame.draw.line(surface, theme.PAPER_LINE, (left, y + 34), (right, y + 34), 2)
-            y += 46
+            pygame.draw.line(surface, theme.PAPER_LINE, (left, y + step - 12), (right, y + step - 12), 2)
+            y += step
         bar = pygame.Rect(left, y + 2, right - left, 18)
         pygame.draw.rect(surface, theme.PAPER_LINE, bar, border_radius=9)
         fill = int(bar.w * max(0.0, min(100.0, result.steadiness)) / 100.0)

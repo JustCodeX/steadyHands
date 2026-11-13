@@ -3,12 +3,24 @@ import pytest
 
 from trainer.core.config import DEFAULT_COMMANDS, VoiceConfig
 from trainer.core.event_bus import EventBus
-from trainer.core.events import CommandEvent, ListenRequest, MisheardEvent, PlaybackStarted, VoiceState, VoiceStateChanged
+from trainer.core.events import (
+    AnswerEvent,
+    AsrDebugEvent,
+    CommandEvent,
+    ListenRequest,
+    MisheardEvent,
+    PlaybackStarted,
+    QuestionAsked,
+    QuestionClosed,
+    VoiceState,
+    VoiceStateChanged,
+)
+from trainer.quiz import Question, QuestionBank
 from trainer.voice.audio_input import AudioInput, Decimator, usb_sound_card_present
 from trainer.voice.recognizer import SpeechRecognizer, Transcript
 from trainer.voice.signal_processor import SignalProcessor
 from trainer.voice.vad import EnergyVad, Segmenter
-from trainer.voice.voice_service import VoiceService, build_interpreter, build_recognizer
+from trainer.voice.voice_service import VoiceService, build_answer_recognizer, build_evaluator, build_interpreter, build_recognizer
 
 
 class FakeRecognizer(SpeechRecognizer):
@@ -281,3 +293,109 @@ def test_command_vocabulary_decides_whether_the_recogniser_is_restricted(monkeyp
     assert seen == [["clamp", "swab"], None]
     with pytest.raises(ValueError):
         build_recognizer(VoiceConfig(command_vocabulary="huge"), [])
+
+
+# --- spoken quiz answers ------------------------------------------------------------
+
+QUIZ = QuestionBank(
+    [Question(id="bleed", text="Which instrument?", options={"clamp": ("clamp",), "swab": ("swab", "sponge")}, correct="clamp")]
+)
+
+
+def answer_service(text, conf=0.9, debug=False):
+    bus = EventBus()
+    svc = VoiceService(
+        bus,
+        VoiceConfig(debug_asr=debug),
+        DEFAULT_COMMANDS,
+        recognizer=FakeRecognizer("should not be used"),
+        audio=FakeAudio(),
+        questions=QUIZ,
+        answer_recognizer=FakeRecognizer(text, conf),
+    )
+    seen = []
+    for kind in (AnswerEvent, CommandEvent, MisheardEvent, AsrDebugEvent):
+        bus.subscribe(kind, seen.append)
+    bus.publish(QuestionAsked(question_id="bleed"))
+    bus.dispatch()
+    return bus, svc, seen
+
+
+def heard(bus, svc, seen):
+    svc.handle_answer(svc._open_question(), speech_end_t=2.0)
+    bus.dispatch()
+    return seen
+
+
+def test_a_spoken_sentence_becomes_a_verdict_without_the_words():
+    seen = heard(*answer_service("i think the clamp will do"))
+    assert len(seen) == 1
+    ev = seen[0]
+    assert isinstance(ev, AnswerEvent) and ev.correct and not ev.unclear
+    assert (ev.question_id, ev.speech_end_t) == ("bleed", 2.0)
+    assert "clamp" not in repr(ev)  # the event carries no transcript
+
+    seen = heard(*answer_service("the sponge"))
+    assert isinstance(seen[0], AnswerEvent) and not seen[0].correct and not seen[0].unclear
+
+
+def test_unclear_answers_and_noise_while_a_question_is_open():
+    # confident speech that names no option: ask again
+    seen = heard(*answer_service("the hammer of course", 0.9))
+    assert isinstance(seen[0], AnswerEvent) and seen[0].unclear
+    # an option, but heard badly: ask again rather than guess
+    seen = heard(*answer_service("clamp", 0.2))
+    assert seen[0].unclear and not seen[0].correct
+    # mumbling in the background and silence cost nothing
+    assert heard(*answer_service("la la la", 0.2)) == []
+    assert heard(*answer_service("", 0.0)) == []
+
+
+def test_control_commands_still_work_while_a_question_is_open():
+    seen = heard(*answer_service("repeat"))
+    assert isinstance(seen[0], CommandEvent) and seen[0].word == "repeat"
+    # but a command word inside an answer is part of the answer
+    seen = heard(*answer_service("help me think it is the clamp"))
+    assert isinstance(seen[0], AnswerEvent) and seen[0].correct
+    # tool words are answers now, never tool changes
+    assert not any(isinstance(e, CommandEvent) for e in heard(*answer_service("clamp")))
+
+
+def test_an_answer_after_the_question_closed_is_dropped():
+    bus, svc, seen = answer_service("clamp")
+    question = svc._open_question()
+    bus.publish(QuestionClosed())
+    bus.dispatch()
+    assert svc._open_question() is None
+    svc.handle_answer(question, speech_end_t=2.0)
+    bus.dispatch()
+    assert seen == []
+
+
+def test_the_debug_panel_is_the_only_place_that_sees_the_answer_text():
+    seen = heard(*answer_service("the clamp", debug=True))
+    debug = [e for e in seen if isinstance(e, AsrDebugEvent)]
+    assert debug[0].text == "the clamp" and debug[0].outcome == "answer_correct"
+    assert not any(isinstance(e, AsrDebugEvent) for e in heard(*answer_service("the clamp")))
+
+
+def test_answer_recogniser_follows_the_config(monkeypatch):
+    import trainer.voice.vosk_recognizer as vosk_module
+
+    seen = []
+
+    class SpyRecognizer(FakeRecognizer):
+        def __init__(self, model_dir, phrases, sample_rate):
+            seen.append(phrases)
+
+    monkeypatch.setattr(vosk_module, "VoskRecognizer", SpyRecognizer)
+    build_answer_recognizer(VoiceConfig(), QUIZ)
+    build_answer_recognizer(VoiceConfig(answer_vocabulary="keywords"), QUIZ)
+    assert seen == [None, ["clamp", "sponge", "swab"]]
+    # no questions, no second recogniser
+    build_answer_recognizer(VoiceConfig(), QuestionBank())
+    assert len(seen) == 2
+    with pytest.raises(ValueError):
+        build_answer_recognizer(VoiceConfig(answer_vocabulary="huge"), QUIZ)
+    with pytest.raises(ValueError):
+        build_evaluator(VoiceConfig(evaluator="magic"))

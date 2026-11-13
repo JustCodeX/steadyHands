@@ -11,13 +11,21 @@ import subprocess
 import wave
 from pathlib import Path
 
+from ..quiz.question import QuestionBank
 from .lines import all_lines
 
 log = logging.getLogger(__name__)
 
 
 class TtsRenderer:
-    def __init__(self, out_dir: str | Path, engine: str = "piper", piper_voice: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        out_dir: str | Path,
+        engine: str = "piper",
+        piper_voice: str | Path | None = None,
+        questions: QuestionBank | None = None,
+    ) -> None:
+        self.questions = questions
         self.out_dir = Path(out_dir)
         self.engine = engine
         self.piper_voice = Path(piper_voice) if piper_voice else None
@@ -26,7 +34,7 @@ class TtsRenderer:
     def render_all(self, force: bool = False) -> int:
         self.out_dir.mkdir(parents=True, exist_ok=True)
         n = 0
-        for line_id, text in all_lines().items():
+        for line_id, text in all_lines(self.questions).items():
             out = self.out_dir / f"{line_id.replace(' ', '_')}.wav"
             if out.exists() and not force:
                 continue

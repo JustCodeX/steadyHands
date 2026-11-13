@@ -32,6 +32,8 @@ class Level:
     targets: list[Target]
     mask: CollisionMap
     dark_zones: list[tuple[int, int, int, int]] = field(default_factory=list)
+    quiz_count: int | None = None  # questions asked in this level; None = the config's default
+    quiz_topics: list[str] = field(default_factory=list)  # empty = any topic
 
     @classmethod
     def load(cls, directory: str | Path, mask: CollisionMap | None = None) -> "Level":
@@ -50,6 +52,7 @@ class Level:
         ]
         if mask is None:
             mask = CollisionMap.from_png(directory / "mask.png")
+        quiz = data.get("quiz", {})
         level = cls(
             name=data.get("name", directory.name),
             directory=directory,
@@ -58,6 +61,8 @@ class Level:
             targets=targets,
             mask=mask,
             dark_zones=[tuple(int(v) for v in z) for z in data.get("dark", [])],
+            quiz_count=int(quiz["count"]) if "count" in quiz else None,
+            quiz_topics=list(quiz.get("topics", [])),
         )
         level.reset()
         return level

@@ -1,0 +1,335 @@
+[
+  {
+    "id": "bleeding_vessel",
+    "topic": "instruments",
+    "text": "A vessel is bleeding. Which instrument stops it?",
+    "options": {
+      "clamp": [
+        "clamp",
+        "clamps"
+      ],
+      "swab": [
+        "swab",
+        "swabs",
+        "swap",
+        "sponge"
+      ],
+      "forceps": [
+        "forceps",
+        "tweezers"
+      ],
+      "scalpel": [
+        "scalpel",
+        "knife"
+      ]
+    },
+    "correct": "clamp",
+    "explain": "A clamp stops a bleeding vessel."
+  },
+  {
+    "id": "remove_splinter",
+    "topic": "instruments",
+    "text": "Which instrument picks a splinter out of the wound?",
+    "options": {
+      "clamp": [
+        "clamp",
+        "clamps"
+      ],
+      "swab": [
+        "swab",
+        "swabs",
+        "swap",
+        "sponge"
+      ],
+      "forceps": [
+        "forceps",
+        "tweezers"
+      ],
+      "scalpel": [
+        "scalpel",
+        "knife"
+      ]
+    },
+    "correct": "forceps",
+    "explain": "Forceps pick up small objects."
+  },
+  {
+    "id": "clear_view",
+    "topic": "instruments",
+    "text": "Blood is hiding the wound. Which instrument clears your view?",
+    "options": {
+      "clamp": [
+        "clamp",
+        "clamps"
+      ],
+      "swab": [
+        "swab",
+        "swabs",
+        "swap",
+        "sponge"
+      ],
+      "forceps": [
+        "forceps",
+        "tweezers"
+      ],
+      "scalpel": [
+        "scalpel",
+        "knife"
+      ]
+    },
+    "correct": "swab",
+    "explain": "A swab soaks up the blood."
+  },
+  {
+    "id": "first_cut",
+    "topic": "instruments",
+    "text": "Which instrument cuts through the skin?",
+    "options": {
+      "clamp": [
+        "clamp",
+        "clamps"
+      ],
+      "swab": [
+        "swab",
+        "swabs",
+        "swap",
+        "sponge"
+      ],
+      "forceps": [
+        "forceps",
+        "tweezers"
+      ],
+      "scalpel": [
+        "scalpel",
+        "knife"
+      ]
+    },
+    "correct": "scalpel",
+    "explain": "The scalpel makes the cut."
+  },
+  {
+    "id": "dark_wound",
+    "topic": "room",
+    "text": "Part of the wound is dark. What do you ask for?",
+    "options": {
+      "light": [
+        "light",
+        "lights",
+        "lamp"
+      ],
+      "swab": [
+        "swab",
+        "swabs",
+        "swap",
+        "sponge"
+      ],
+      "clamp": [
+        "clamp",
+        "clamps"
+      ]
+    },
+    "correct": "light",
+    "explain": "Ask for the light."
+  },
+  {
+    "id": "shaky_hand",
+    "topic": "room",
+    "text": "Your hand is shaking near a vessel. Which command slows the instrument down?",
+    "options": {
+      "steady": [
+        "steady",
+        "precision"
+      ],
+      "cancel": [
+        "cancel"
+      ],
+      "light": [
+        "light",
+        "lights"
+      ]
+    },
+    "correct": "steady",
+    "explain": "Say steady for precision mode."
+  },
+  {
+    "id": "fast_pulse",
+    "topic": "patient",
+    "text": "The resting pulse of the patient is one hundred and forty. Is that normal?",
+    "options": {
+      "yes": [
+        "yes",
+        "yeah",
+        "yep",
+        "sure"
+      ],
+      "no": [
+        "no",
+        "not",
+        "nope"
+      ]
+    },
+    "correct": "no",
+    "explain": "No. A normal resting pulse is between sixty and one hundred."
+  },
+  {
+    "id": "glove_touch",
+    "topic": "safety",
+    "text": "Your sterile glove touches the table. Do you keep working with it?",
+    "options": {
+      "yes": [
+        "yes",
+        "yeah",
+        "yep",
+        "sure"
+      ],
+      "no": [
+        "no",
+        "not",
+        "nope"
+      ]
+    },
+    "correct": "no",
+    "explain": "No. Change the glove, it is no longer sterile."
+  },
+  {
+    "id": "count_swabs",
+    "topic": "safety",
+    "text": "Do you count the swabs before you close the wound?",
+    "options": {
+      "yes": [
+        "yes",
+        "yeah",
+        "yep",
+        "sure"
+      ],
+      "no": [
+        "no",
+        "not",
+        "nope"
+      ]
+    },
+    "correct": "yes",
+    "explain": "Yes. Every swab is counted, so that none stays inside."
+  },
+  {
+    "id": "call_back",
+    "topic": "safety",
+    "text": "The surgeon calls for a clamp. Does the assistant repeat the word?",
+    "options": {
+      "yes": [
+        "yes",
+        "yeah",
+        "yep",
+        "sure"
+      ],
+      "no": [
+        "no",
+        "not",
+        "nope"
+      ]
+    },
+    "correct": "yes",
+    "explain": "Yes. Repeating the call confirms that it was understood."
+  },
+  {
+    "id": "heart_chambers",
+    "topic": "anatomy",
+    "text": "How many chambers does the human heart have?",
+    "options": {
+      "two": [
+        "two"
+      ],
+      "three": [
+        "three"
+      ],
+      "four": [
+        "four"
+      ],
+      "five": [
+        "five"
+      ]
+    },
+    "correct": "four",
+    "explain": "The heart has four chambers."
+  },
+  {
+    "id": "away_from_heart",
+    "topic": "anatomy",
+    "text": "Which vessels carry blood away from the heart?",
+    "options": {
+      "arteries": [
+        "arteries",
+        "artery"
+      ],
+      "veins": [
+        "veins",
+        "vein"
+      ],
+      "capillaries": [
+        "capillaries",
+        "capillary"
+      ]
+    },
+    "correct": "arteries",
+    "explain": "Arteries carry blood away from the heart."
+  },
+  {
+    "id": "oxygen",
+    "topic": "anatomy",
+    "text": "Which gas do red blood cells carry to the tissue?",
+    "options": {
+      "oxygen": [
+        "oxygen"
+      ],
+      "carbon_dioxide": [
+        "carbon dioxide",
+        "carbon",
+        "dioxide"
+      ],
+      "nitrogen": [
+        "nitrogen"
+      ]
+    },
+    "correct": "oxygen",
+    "explain": "Red blood cells carry oxygen."
+  },
+  {
+    "id": "check_first",
+    "topic": "patient",
+    "text": "In an emergency, what do you check first: airway, breathing or circulation?",
+    "options": {
+      "airway": [
+        "airway",
+        "airways"
+      ],
+      "breathing": [
+        "breathing",
+        "breath"
+      ],
+      "circulation": [
+        "circulation",
+        "pulse"
+      ]
+    },
+    "correct": "airway",
+    "explain": "The airway comes first, then breathing, then circulation."
+  },
+  {
+    "id": "body_temperature",
+    "topic": "patient",
+    "text": "What is a normal body temperature in degrees Celsius: thirty three, thirty seven or forty one?",
+    "options": {
+      "thirty_three": [
+        "thirty three"
+      ],
+      "thirty_seven": [
+        "thirty seven"
+      ],
+      "forty_one": [
+        "forty one"
+      ]
+    },
+    "correct": "thirty_seven",
+    "explain": "Thirty seven degrees is normal."
+  }
+]

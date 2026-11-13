@@ -2,6 +2,7 @@
 
 Left to right: the patient's face and lives, the clock, the instrument tray
 (the knob picks from it), the list of things still to treat, and the mic.
+An open quiz question is shown along the bottom edge, like a subtitle.
 """
 from __future__ import annotations
 
@@ -52,6 +53,7 @@ class Hud:
         self._tray(surface, snap, t)
         self._tasks(surface, snap)
         self._status(surface, snap, voice, t)
+        self._question(surface, snap)
 
     # --- parts -----------------------------------------------------------------
 
@@ -64,7 +66,10 @@ class Hud:
             self._heart(surface, 74 + i * 25, 18, 10, LIFE if alive else theme.PANEL_LINE)
         rate = snap.heart_rate
         colour = theme.GOOD if rate < 100 else theme.WARN if rate < 130 else theme.BAD
-        self.fonts.draw(surface, "small", f"{rate} bpm", colour, (63, 31))
+        bpm = self.fonts.draw(surface, "small", f"{rate} bpm", colour, (63, 31))
+        for i in range(snap.stress):  # one arrow per stress level
+            x = bpm.right + 5 + i * 9
+            pygame.draw.polygon(surface, theme.BAD, [(x, 46), (x + 4, 36), (x + 8, 46)])
 
     def _clock(self, surface: pygame.Surface, snap: GameSnapshot, t: float) -> None:
         secs = int(math.ceil(snap.time_left))
@@ -93,6 +98,37 @@ class Hud:
                 surface.blit(self._dimmed(word), (rect.x + 3, rect.y + 2))
         name_x = self.TRAY_X + len(snap.tools) * (self.SLOT_W + self.SLOT_GAP) + 4
         self.fonts.draw(surface, "label", snap.tool.capitalize(), theme.TARGET_COLOURS.get(snap.tool, theme.TEXT), (name_x, 28), anchor="midleft")
+
+    def _question(self, surface: pygame.Surface, snap: GameSnapshot) -> None:
+        """The open quiz question and the time left to answer it."""
+        if not snap.question_text:
+            return
+        lines = self._wrap("body", snap.question_text, self.width - 130)
+        texts = [self.fonts.text("body", line, theme.TEXT) for line in lines]
+        box = pygame.Rect(0, 0, max(t.get_width() for t in texts) + 86, 26 * len(texts) + 26)
+        box.midbottom = (self.width // 2, surface.get_height() - 6)
+        pygame.draw.rect(surface, theme.PANEL, box, border_radius=16)
+        pygame.draw.rect(surface, theme.ACCENT, box, 3, border_radius=16)
+        pygame.draw.circle(surface, theme.ACCENT, (box.x + 30, box.centery - 3), 15)
+        self.fonts.draw(surface, "head", "?", theme.PANEL, (box.x + 30, box.centery - 3), anchor="center")
+        for i, text in enumerate(texts):
+            surface.blit(text, (box.x + 58, box.y + 8 + 26 * i))
+        left = max(0.0, min(1.0, snap.question_left))
+        colour = theme.GOOD if left > 0.5 else theme.WARN if left > 0.25 else theme.BAD
+        track = pygame.Rect(box.x + 58, box.bottom - 13, box.w - 76, 5)
+        pygame.draw.rect(surface, theme.PANEL_LINE, track, border_radius=3)
+        pygame.draw.rect(surface, colour, (track.x, track.y, int(track.w * left), track.h), border_radius=3)
+
+    def _wrap(self, font: str, text: str, width: int) -> list[str]:
+        lines, line = [], ""
+        for word in text.split():
+            longer = f"{line} {word}".strip()
+            if line and self.fonts.width(font, longer) > width:
+                lines.append(line)
+                line = word
+            else:
+                line = longer
+        return lines + [line]
 
     def _dimmed(self, word: str) -> pygame.Surface:
         if word not in self._dim:

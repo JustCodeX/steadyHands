@@ -15,19 +15,40 @@ from .core.config import load
 from .core.event_bus import EventBus
 from .game.engine import GameEngine
 from .game.level import LevelCatalog
+from .quiz.question import QuestionBank
 from .hardware.keyboard_input import KeyboardInput
 from .hardware.mcu_link import McuLink
 from .system.metrics_logger import MetricsLogger
 from .system.power_manager import PowerManager
 from .ui.renderer import Renderer
-from .voice.voice_service import VoiceService, build_interpreter, build_recognizer
+from .voice.voice_service import (
+    VoiceService,
+    build_answer_recognizer,
+    build_evaluator,
+    build_interpreter,
+    build_recognizer,
+)
+
+log = logging.getLogger(__name__)
+
+
+def load_questions(cfg) -> QuestionBank:
+    """The quiz questions, or none when the quiz is off or the file is unusable."""
+    if not cfg.quiz.enabled:
+        return QuestionBank()
+    try:
+        return QuestionBank.load(cfg.quiz.questions_file)
+    except (OSError, ValueError, KeyError) as exc:
+        log.error("no quiz questions (%s); the quiz is off", exc)
+        return QuestionBank()
 
 
 def build_app(cfg, *, mcu: bool, voice: bool, sound: bool, keyboard: bool, display: bool) -> App:
     bus = EventBus()
     app = App(bus)
     levels = LevelCatalog(cfg.levels_dir)
-    app.register(GameEngine(bus, cfg.game, levels, cfg.display.width, cfg.display.height))
+    questions = load_questions(cfg)
+    app.register(GameEngine(bus, cfg.game, levels, cfg.display.width, cfg.display.height, cfg.quiz, questions))
     if display:
         app.register(Renderer(bus, cfg.display))
     if keyboard:
@@ -39,7 +60,18 @@ def build_app(cfg, *, mcu: bool, voice: bool, sound: bool, keyboard: bool, displ
     if voice:
         interpreter = build_interpreter(cfg.voice, cfg.commands)
         recognizer = build_recognizer(cfg.voice, interpreter.phrases())
-        app.register(VoiceService(bus, cfg.voice, cfg.commands, recognizer=recognizer, interpreter=interpreter))
+        app.register(
+            VoiceService(
+                bus,
+                cfg.voice,
+                cfg.commands,
+                recognizer=recognizer,
+                interpreter=interpreter,
+                questions=questions,
+                answer_recognizer=build_answer_recognizer(cfg.voice, questions),
+                evaluator=build_evaluator(cfg.voice),
+            )
+        )
     app.register(PowerManager(bus, cfg.system, cfg.game.deadzone_g))
     app.register(MetricsLogger(bus, cfg.system))
     return app

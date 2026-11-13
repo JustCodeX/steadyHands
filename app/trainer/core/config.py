@@ -90,7 +90,36 @@ class VoiceConfig:
     vad_preroll_ms: int = 250
     max_segment_s: float = 3.0
     confidence_threshold: float = 0.6
+    # --- spoken quiz answers (whole sentences) ---
+    # Spoken answer -> one of the question's options. "keyword" looks for the
+    # options' phrases; "needle" is reserved (docs/needle-integration.md).
+    evaluator: str = "keyword"
+    # "open": free speech. "keywords": the recogniser only knows the answer
+    # phrases and treats every other word as filler (more robust in noise).
+    answer_vocabulary: str = "open"
+    answer_max_segment_s: float = 8.0
+    answer_hangover_ms: int = 700  # people pause in the middle of a sentence
+    answer_confidence_threshold: float = 0.5
     debug_asr: bool = False  # on-screen side panel with everything the recogniser hears
+
+
+@dataclass
+class QuizConfig:
+    """Questions the patient asks during a round, and what a wrong answer costs."""
+
+    enabled: bool = True
+    questions_file: str = str(APP_DIR / "assets" / "questions.json")
+    questions_per_round: int = 2  # a level can override this (level.json, "quiz")
+    first_after_s: float = 8.0
+    interval_s: float = 12.0  # from one question's end to the next question
+    answer_window_s: float = 8.0  # counts only while the patient is silent
+    min_time_left_s: float = 12.0  # no new question this close to the end of the round
+    unclear_limit: int = 2  # this many unclear answers count as a wrong one
+    wrong_time_penalty_s: float = 5.0
+    wrong_heart_rate_bump: int = 15
+    max_stress: int = 3
+    stress_speed_step: float = 0.15  # the instrument moves this much faster per stress level
+    stress_bleed_step: float = 0.25  # bleeding timers run this much faster per stress level
 
 
 @dataclass
@@ -130,6 +159,7 @@ class SystemConfig:
 class Config:
     display: DisplayConfig = field(default_factory=DisplayConfig)
     game: GameConfig = field(default_factory=GameConfig)
+    quiz: QuizConfig = field(default_factory=QuizConfig)
     voice: VoiceConfig = field(default_factory=VoiceConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
     mcu: McuConfig = field(default_factory=McuConfig)

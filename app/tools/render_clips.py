@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Render every patient line to WAV once (setup step, not during play).
+"""Render every patient line and quiz question to WAV once (setup step, not during play).
+
+An existing clip is kept: after changing a question's text, run with --force.
 
 Usage: python tools/render_clips.py [--engine piper|espeak] [--voice path.onnx] [--force]
 """
@@ -13,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from trainer.audio.tts_renderer import TtsRenderer  # noqa: E402
 from trainer.core.config import load  # noqa: E402
+from trainer.quiz.question import QuestionBank  # noqa: E402
 
 
 def main() -> int:
@@ -24,14 +27,15 @@ def main() -> int:
     p.add_argument("--force", action="store_true")
     args = p.parse_args()
     logging.basicConfig(level=logging.INFO)
-    renderer = TtsRenderer(args.out, args.engine, args.voice)
+    questions = QuestionBank.load(cfg.quiz.questions_file)
+    renderer = TtsRenderer(args.out, args.engine, args.voice, questions)
     try:
         n = renderer.render_all(force=args.force)
     except Exception as exc:
         print(f"TTS failed with {args.engine}: {exc}", file=sys.stderr)
         if args.engine == "piper":
             print("Falling back to espeak-ng", file=sys.stderr)
-            n = TtsRenderer(args.out, "espeak").render_all(force=args.force)
+            n = TtsRenderer(args.out, "espeak", questions=questions).render_all(force=args.force)
         else:
             return 1
     print(f"rendered {n} clips into {args.out}")

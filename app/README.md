@@ -46,7 +46,7 @@ python -m trainer --no-mcu --no-voice --windowed   # on a laptop: keyboard only
 
 Controls without voice: tilt moves, the knob picks the instrument (while paused it sets the steering speed), a knob press switches on the light in dark zones, A uses the instrument, B pauses, C also steps to the next instrument.
 
-Keyboard: arrows tilt (Shift = slow), Space = A, M = B, C = C, +/- turn the knob, Enter presses it. As if spoken: 1-4 call tools, L light, S steady, X cancel, R repeat, H help, N new game. Esc quits.
+Keyboard: arrows tilt (Shift = slow), Space = A, M = B, C = C, +/- turn the knob, Enter presses it. As if spoken: 1-4 call tools, L light, S steady, X cancel, R repeat, H help, N new game. Y and U answer the open quiz question right and wrong. Esc quits.
 
 Settings: copy the defaults from `trainer/core/config.py` into a TOML file and pass `--config file.toml` (or set `STEADYHANDS_CONFIG`). Typical overrides: `voice.input_device = ""` (default input instead of the USB headset), `audio.output_device`, `game.speed_px_per_s`, `voice.confidence_threshold`, `mcu.tool_leds = true` (show the active tool on the Modulino Buttons LEDs).
 

@@ -4,6 +4,8 @@ No speech synthesis runs during play; the game only plays these files.
 """
 from __future__ import annotations
 
+from ..quiz.question import QuestionBank
+
 PATIENT_LINES: dict[str, str] = {
     # reactions
     "ouch_1": "Ouch!",
@@ -47,6 +49,13 @@ PATIENT_LINES: dict[str, str] = {
     "calls_none": "No instrument calls.",
     "calls_good": "All instrument calls were correct.",
     "calls_wrong": "Some calls were for the wrong instrument.",
+    # quiz
+    "quiz_correct": "Correct.",
+    "quiz_wrong": "Wrong.",
+    "quiz_timeout": "Too slow.",
+    "quiz_all": "Every question answered correctly.",
+    "quiz_some": "Some answers were wrong.",
+    "quiz_none": "No question answered correctly.",
 }
 
 MAX_NUMBER = 180
@@ -57,8 +66,22 @@ def number_id(n: int) -> str:
     return f"n_{n}"
 
 
-def all_lines() -> dict[str, str]:
+def question_id(question: str) -> str:
+    """Clip id of a quiz question, from the question's id."""
+    return f"q_{question}"
+
+
+def explain_id(question: str) -> str:
+    """Clip id of the sentence that gives a question's right answer."""
+    return f"qa_{question}"
+
+
+def all_lines(questions: QuestionBank | None = None) -> dict[str, str]:
     lines = dict(PATIENT_LINES)
     for n in range(MAX_NUMBER + 1):
         lines[number_id(n)] = str(n)
+    for q in questions.questions if questions else []:
+        lines[question_id(q.id)] = q.text
+        if q.explain:
+            lines[explain_id(q.id)] = q.explain
     return lines

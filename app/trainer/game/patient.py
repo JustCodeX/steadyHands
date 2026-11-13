@@ -18,6 +18,10 @@ class Patient:
         self.contacts += 1
         self.heart_rate = min(180.0, self.heart_rate + self.per_contact)
 
+    def startle(self, bpm: int) -> None:
+        """The heart rate jumps without a contact (a wrong quiz answer)."""
+        self.heart_rate = min(180.0, self.heart_rate + bpm)
+
     def update(self, dt: float) -> None:
         if self.heart_rate > self.base_rate:
             self.heart_rate = max(float(self.base_rate), self.heart_rate - self.decay_per_s * dt)

@@ -172,6 +172,9 @@ class Renderer(Service):
     ASR_PANEL_W = 300
     ASR_OUTCOME_COLOURS = {
         "command": theme.GOOD,
+        "answer_correct": theme.GOOD,
+        "answer_wrong": theme.BAD,
+        "unclear": theme.WARN,
         "low_confidence": theme.WARN,
         "no_match": theme.MUTED,
         "empty": theme.MUTED,

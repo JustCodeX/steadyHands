@@ -5,8 +5,9 @@ import logging
 import math
 import time
 
-from ..core.config import GameConfig, TOOL_WORDS
+from ..core.config import GameConfig, QuizConfig, TOOL_WORDS
 from ..core.events import (
+    AnswerEvent,
     CommandEvent,
     GameEvent,
     GameSnapshot,
@@ -16,15 +17,22 @@ from ..core.events import (
     ListenRequest,
     McuStatus,
     MisheardEvent,
+    PlaybackFinished,
+    PlaybackStarted,
+    QuestionAsked,
+    QuestionClosed,
     RoundResult,
     TargetView,
 )
+from ..quiz.question import QuestionBank
 from ..core.service import Service
 from . import instruments
 from .level import Level, LevelCatalog
 from .metrics import TrainingMetrics
 from .modes import CoopMode, GameMode, SoloMode
 from .patient import Patient
+from .quiz_director import QuizDirector, QuizOutcome, QuizStep
+from .stress import Stress
 
 log = logging.getLogger(__name__)
 
@@ -32,9 +40,22 @@ log = logging.getLogger(__name__)
 class GameEngine(Service):
     name = "game"
 
-    def __init__(self, bus, cfg: GameConfig, levels: LevelCatalog, width: int = 1024, height: int = 600) -> None:
+    def __init__(
+        self,
+        bus,
+        cfg: GameConfig,
+        levels: LevelCatalog,
+        width: int = 1024,
+        height: int = 600,
+        quiz_cfg: QuizConfig | None = None,
+        questions: QuestionBank | None = None,
+    ) -> None:
         super().__init__(bus)
         self.cfg = cfg
+        self.quiz_cfg = quiz_cfg or QuizConfig()
+        self.quiz = QuizDirector(self.quiz_cfg, questions)  # without questions it never asks
+        self.stress = Stress(self.quiz_cfg)
+        self._patient_speaking = False
         self.levels = levels
         self.width = width
         self.height = height
@@ -75,6 +96,9 @@ class GameEngine(Service):
         bus.subscribe(MisheardEvent, self.on_misheard)
         bus.subscribe(IdleChanged, self.on_idle)
         bus.subscribe(McuStatus, self._on_mcu_status)
+        bus.subscribe(AnswerEvent, self.on_answer)
+        bus.subscribe(PlaybackStarted, lambda e: self._set_patient_speaking(True))
+        bus.subscribe(PlaybackFinished, lambda e: self._set_patient_speaking(False))
 
     # --- lifecycle -----------------------------------------------------------
 
@@ -120,6 +144,11 @@ class GameEngine(Service):
         self.patient.reset()
         self.metrics.start()
         self.mode.reset()
+        self.stress.reset()
+        if self.quiz.abandon():  # "new game" while a question was open
+            self.bus.publish(QuestionClosed())
+        count = self.level.quiz_count if self.level.quiz_count is not None else self.quiz_cfg.questions_per_round
+        self.quiz.reset(count, self.level.quiz_topics)
         self.tool = instruments.make("forceps")
         self.previous_tool = None
         self.time_left = self.level.time_limit_s
@@ -134,8 +163,12 @@ class GameEngine(Service):
 
     def end_round(self, won: bool) -> None:
         assert self.level is not None
+        if self.quiz.abandon():
+            self.bus.publish(QuestionClosed())
         self.metrics.end()
         self.metrics.contacts = self.patient.contacts
+        self.metrics.questions_correct = self.quiz.correct
+        self.metrics.questions_wrong = self.quiz.wrong
         self._result = self.metrics.result(self.level.name, won)
         self._result_t = time.monotonic()
         self.state = GameState.RESULT
@@ -244,7 +277,10 @@ class GameEngine(Service):
             self.bus.publish(GameEvent(kind="help", detail=",".join(self.available_commands())))
             return
         if word == "repeat":
-            self.bus.publish(GameEvent(kind="repeat"))
+            if self.quiz.pending is not None:  # say the open question again
+                self.bus.publish(GameEvent(kind="question", detail=self.quiz.pending.id))
+            else:
+                self.bus.publish(GameEvent(kind="repeat"))
             return
         if word == "pause":
             self.pause()
@@ -301,6 +337,44 @@ class GameEngine(Service):
             self.metrics.calls_correct += 1
         self.bus.publish(GameEvent(kind="tool_changed", detail=word))
 
+    # --- quiz ----------------------------------------------------------------
+
+    def _set_patient_speaking(self, speaking: bool) -> None:
+        self._patient_speaking = speaking
+
+    def _update_quiz(self, dt: float) -> None:
+        step = self.quiz.tick(dt, self._patient_speaking, self.time_left)
+        if step is QuizStep.ASK:
+            question = self.quiz.pending
+            self.bus.publish(QuestionAsked(question_id=question.id))
+            self.bus.publish(GameEvent(kind="question", detail=question.id))
+        elif step is QuizStep.TIMEOUT:
+            self._wrong_answer("quiz_timeout")
+
+    def on_answer(self, ev: AnswerEvent) -> None:
+        if self.state is not GameState.PLAYING:
+            return
+        outcome = self.quiz.answer(ev)
+        if outcome is QuizOutcome.UNCLEAR:
+            self.last_command = "?"
+            self.bus.publish(GameEvent(kind="pardon"))
+        elif outcome is QuizOutcome.CORRECT:
+            self.stress.better()
+            self.say("Correct", 2)
+            self.bus.publish(QuestionClosed())
+            self.bus.publish(GameEvent(kind="quiz_correct", detail=self.quiz.last.id))
+        elif outcome is QuizOutcome.WRONG:
+            self._wrong_answer("quiz_wrong")
+
+    def _wrong_answer(self, kind: str) -> None:
+        """A wrong or missing answer: less time, a faster pulse, one stress level up."""
+        self.stress.worse()
+        self.time_left -= self.quiz_cfg.wrong_time_penalty_s
+        self.patient.startle(self.quiz_cfg.wrong_heart_rate_bump)
+        self.say(f"Wrong: -{self.quiz_cfg.wrong_time_penalty_s:.0f} s", 3)
+        self.bus.publish(QuestionClosed())
+        self.bus.publish(GameEvent(kind=kind, detail=self.quiz.last.id))
+
     # --- round update --------------------------------------------------------
 
     def _update_round(self, dt: float, now: float) -> None:
@@ -310,6 +384,7 @@ class GameEngine(Service):
             self._move(frame, dt, now)
         self.patient.update(dt)
         self._update_targets(dt, now)
+        self._update_quiz(dt)
         self.time_left -= dt
         if self.level.complete():
             self.end_round(won=True)
@@ -329,7 +404,7 @@ class GameEngine(Service):
             return
         # Remove the dead zone smoothly so the tool does not jump at the edge.
         scale = (mag - self.cfg.deadzone_g) / max(1e-6, mag)
-        speed = self.cfg.speed_px_per_s * self.sensitivity
+        speed = self.cfg.speed_px_per_s * self.sensitivity * self.stress.speed_factor
         if now < self.steady_until:
             speed *= self.cfg.steady_factor
         nx = self.x + tx * scale * speed * dt
@@ -366,7 +441,7 @@ class GameEngine(Service):
         assert self.level is not None
         for t in self.level.remaining():
             if t.timer_left is not None:
-                t.timer_left -= dt
+                t.timer_left -= dt * self.stress.bleed_factor
                 if t.timer_left <= 0:
                     t.timer_left = t.timer_s
                     self.patient.on_contact()
@@ -442,4 +517,8 @@ class GameEngine(Service):
             sensitivity_range=(self.cfg.sensitivity_min, self.cfg.sensitivity_max),
             tool_radius=self.cfg.tool_radius,
             light_left=max(0.0, self.light_until - now),
+            question_text=self.quiz.pending.text if in_round and self.quiz.pending else "",
+            question_left=self.quiz.window_fraction(),
+            stress=self.stress.level,
+            max_stress=self.quiz_cfg.max_stress,
         )

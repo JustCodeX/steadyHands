@@ -126,6 +126,29 @@ class ListenRequest(Event):
     on: bool
 
 
+@dataclass(kw_only=True)
+class QuestionAsked(Event):
+    """Game -> voice: from now on, speech is the answer to this question."""
+
+    question_id: str
+
+
+@dataclass(kw_only=True)
+class QuestionClosed(Event):
+    """Game -> voice: the question is over; speech is commands again."""
+
+
+@dataclass(kw_only=True)
+class AnswerEvent(Event):
+    """Voice -> game: the verdict on a spoken answer. Never the words themselves."""
+
+    question_id: str = ""  # "" means the question that is open right now (keyboard)
+    correct: bool = False
+    unclear: bool = False  # the answer named no single option
+    confidence: float = 1.0
+    speech_end_t: float | None = None
+
+
 # --- Game -> sound / display -------------------------------------------------
 
 
@@ -133,7 +156,9 @@ class ListenRequest(Event):
 class GameEvent(Event):
     """Something happened in the game. `kind` selects the patient line."""
 
-    kind: str  # hit, item_out, win, lose, pardon, help, wrong_tool, bleed_timeout, tool_changed, repeat, ...
+    # hit, item_out, win, lose, pardon, help, wrong_tool, bleed_timeout, tool_changed, repeat,
+    # question, quiz_correct, quiz_wrong, quiz_timeout (detail: the question id), ...
+    kind: str
     detail: str = ""
 
 
@@ -147,6 +172,8 @@ class RoundResult(Event):
     calls_correct: int
     calls_wrong: int
     steady_uses: int
+    questions_correct: int = 0
+    questions_wrong: int = 0
 
 
 @dataclass(kw_only=True)
@@ -226,3 +253,7 @@ class GameSnapshot(Event):
     sensitivity_range: tuple[float, float] = (0.3, 2.0)
     tool_radius: int = 9
     light_left: float = 0.0  # seconds of light remaining
+    question_text: str = ""  # the open quiz question, "" if none
+    question_left: float = 0.0  # 0..1 of the answer window remaining
+    stress: int = 0  # 0..max_stress, raised by wrong answers
+    max_stress: int = 3

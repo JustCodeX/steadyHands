@@ -7,7 +7,7 @@ Needle picks one function from a list and fills its arguments. It does not chat 
 | Job | Input | Tool call we expect |
 | --- | --- | --- |
 | Commands | "could you hand me something to stop the bleeding" | `select_instrument(instrument="clamp")` |
-| Quiz answers (branch `game/quiz`) | "I would take a clamp for that" | `answer(choice="clamp")`, where `choice` is an enum of that question's options |
+| Quiz answers | "I would take a clamp for that" | `answer(choice="clamp")`, where `choice` is an enum of that question's options |
 
 ## Where it plugs in
 
@@ -24,6 +24,11 @@ mic -> SignalProcessor -> EnergyVad/Segmenter -> SpeechRecognizer -> CommandInte
 | `ActionCatalog` | `app/trainer/game/actions.py` | The game's actions as tool schemas, and the way back from a tool call to a command word |
 | `build_interpreter` | `app/trainer/voice/voice_service.py` | Picks the implementation from `voice.interpreter` |
 | `VoiceService.handle_segment` | `app/trainer/voice/voice_service.py` | Calls the interpreter once per speech segment |
+| `AnswerEvaluator` | `app/trainer/quiz/evaluator.py` | The interface for quiz answers: `evaluate(question, text) -> Verdict(choice, score)` |
+| `KeywordEvaluator` | `app/trainer/quiz/evaluator.py` | The default implementation (looks for the options' phrases, no model) |
+| `Question`, `QuestionBank` | `app/trainer/quiz/question.py`, `app/assets/questions.json` | Each question has option ids with phrases, and one correct option |
+| `build_evaluator` | `app/trainer/voice/voice_service.py` | Picks the implementation from `voice.evaluator` |
+| `VoiceService.handle_answer` | `app/trainer/voice/voice_service.py` | Calls the evaluator while a question is open, and publishes only the verdict (`AnswerEvent`) |
 
 The game runs on command words (`CommandEvent.word`, the keys of `DEFAULT_COMMANDS` in `app/trainer/core/config.py`). A tool call is turned into such a word, so `GameEngine.on_command` does not change.
 
@@ -67,7 +72,9 @@ The game runs on command words (`CommandEvent.word`, the keys of `DEFAULT_COMMAN
 
 4. **Model download**: add it to `app/setup/download_models.sh`. Models live in `app/models/`, which is git-ignored.
 
-5. **Tests** in `app/tests/`: a fake model that returns fixed tool calls, then check that a valid call becomes the right `CommandEvent`, that an unknown tool or argument gives no event, and that "no tool" stays silent. `tests/test_actions.py` and `tests/test_voice_pipeline.py` show the pattern (`FakeRecognizer`, `FakeAudio`).
+5. **Quiz answers**: a second class `NeedleEvaluator(AnswerEvaluator)`. Build one tool, `answer(choice)`, whose enum is `list(question.options)`, with the question text and each option's phrases in the description. Return `Verdict(choice, score)`, or `Verdict(None)` when the model chooses no tool: the game then asks the player to say it again. Select it in `build_evaluator` (`voice.evaluator = "needle"`). Spoken answers already use the open vocabulary (`voice.answer_vocabulary = "open"`), so nothing else changes. Share one loaded model between the interpreter and the evaluator.
+
+6. **Tests** in `app/tests/`: a fake model that returns fixed tool calls, then check that a valid call becomes the right `CommandEvent`, that an unknown tool or argument gives no event, and that "no tool" stays silent. `tests/test_actions.py` and `tests/test_voice_pipeline.py` show the pattern (`FakeRecognizer`, `FakeAudio`).
 
 ## Design rules
 

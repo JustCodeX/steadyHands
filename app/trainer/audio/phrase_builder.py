@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from ..core.events import RoundResult
-from .lines import number_id
+from .lines import explain_id, number_id, question_id
 
 
 class PhraseBuilder:
@@ -27,6 +27,13 @@ class PhraseBuilder:
             ids.append("calls_good")
         else:
             ids.append("calls_wrong")
+        if r.questions_correct + r.questions_wrong > 0:
+            if r.questions_wrong == 0:
+                ids.append("quiz_all")
+            elif r.questions_correct == 0:
+                ids.append("quiz_none")
+            else:
+                ids.append("quiz_some")
         return ids
 
     @staticmethod
@@ -41,6 +48,12 @@ class PhraseBuilder:
             return [detail] if detail else []
         if kind == "help":
             return PhraseBuilder.help(detail.split(",")) if detail else ["you_can_say", "help"]
+        if kind == "question":
+            return [question_id(detail)] if detail else []
+        if kind == "quiz_correct":
+            return [kind]
+        if kind in ("quiz_wrong", "quiz_timeout"):
+            return [kind, explain_id(detail)] if detail else [kind]
         if kind in ("round_started", "menu", "paused", "resumed", "awaiting_callback"):
             return [kind] if kind != "awaiting_callback" else []
         if kind in ("item_out", "swabbed", "clamped", "opened", "bleed_timeout", "wrong_tool", "pardon", "steady", "light", "win", "lose"):
