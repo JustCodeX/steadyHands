@@ -37,6 +37,7 @@ A working prototype of a surgeon trainer: you guide a surgical instrument throug
 | ✅ Code style | Object-oriented and modular: every feature is a class behind an interface (see [Code design](#code-design)) |
 | ❓ D2 Speech-to-text | Timon decides (model deployment and ASR choice are his area). The code ships `VoskRecognizer` (Vosk small English, vocabulary restricted to our commands: aarch64 wheel, 40 MB model) as the working default; any other engine is a further `SpeechRecognizer` subclass selected in the config (see [Speech pipeline](#speech-pipeline)) |
 | ✅ Purpose | Working prototype of a surgeon trainer, inspired by Dr. Bibber |
+| ✅ Wall feedback | No horn or red LED is wired. A wall touch plays a buzz in the game (`SoundService`), then the patient's "Ouch!". The MCU alarm and LEDs stay off until `McuConfig.feedback` is set to `true`. |
 | ❓ D3 Name | "Steady Hands" is a placeholder |
 | ❓ D4 Audio for the audience | Headset audio only reaches the person wearing it. Does the display have an audio jack, or can we get a USB speaker? |
 | ❓ D5 License for our code | Must fit the licenses of the models we use (see [Licenses](#licenses)) |
@@ -46,7 +47,7 @@ A working prototype of a surgeon trainer: you guide a surgical instrument throug
 
 ### One-player mode
 
-The surgeon holds the **instrument**, a handle containing the Modulino Movement, and tilts it to steer the tool tip through the corridors of the patient map. The surgeon wears the headset and calls for tools. Touching a wall sounds the horn, flashes the red LED, makes the patient react ("Ouch!"), and raises the patient's heart rate. After three touches, the patient wakes up and the round is lost. Removing every item before time runs out wins. A round lasts about 60 seconds, so a trainee gets feedback within the first minute.
+The surgeon holds the **instrument**, a handle containing the Modulino Movement, and tilts it to steer the tool tip through the corridors of the patient map. The surgeon wears the headset and calls for tools. Touching a wall plays a buzz in the game, makes the patient react ("Ouch!"), and raises the patient's heart rate. The horn and red LED on the MCU are not wired yet, so they are off by default. After three touches, the patient wakes up and the round is lost. Removing every item before time runs out wins. A round lasts about 60 seconds, so a trainee gets feedback within the first minute.
 
 ### Co-op mode (two players)
 

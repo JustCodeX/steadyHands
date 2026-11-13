@@ -2,7 +2,7 @@
 
 A working prototype of a voice-controlled surgeon trainer on the Arduino UNO Q, inspired by the steady-hand game Dr. Bibber. Built by team PromptPimps at the Speech-to-Speech hackathon (13–14 November 2026, Nürnberg).
 
-You guide a surgical instrument through a patient map on a 7-inch screen by tilting the instrument in your hand. You call for instruments by voice ("forceps!", "clamp!"), as in a real operating room, and touching a wall sounds the horn. After each round, the trainer shows your time, wall contacts, and steadiness. In co-op mode, the assistant repeats every call back before the instrument is handed over, the way operating-room teams confirm instructions. Speech recognition, game logic, and speech output run entirely offline on the board, and no audio is stored.
+You guide a surgical instrument through a patient map on a 7-inch screen by tilting the instrument in your hand. You call for instruments by voice ("forceps!", "clamp!"), as in a real operating room, and touching a wall plays a buzz and the patient cries out. After each round, the trainer shows your time, wall contacts, and steadiness. In co-op mode, the assistant repeats every call back before the instrument is handed over, the way operating-room teams confirm instructions. Speech recognition, game logic, and speech output run entirely offline on the board, and no audio is stored.
 
 ## Documents
 
@@ -20,7 +20,7 @@ You guide a surgical instrument through a patient map on a 7-inch screen by tilt
 - **Display:** Elecrow 7" IPS over HDMI, through a USB-C hub
 - **Modulinos:** Movement (tilt), Buttons, Knob, optionally Distance, chained over Qwiic
 - **Audio:** headset
-- **Signals:** horn and red LED
+- **Signals:** none for now. The wall buzz plays in the game; the horn and red LED stay off until they are wired (`McuConfig.feedback`).
 
 ## Hardware wiring
 

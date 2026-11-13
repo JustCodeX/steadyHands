@@ -115,6 +115,8 @@ UNO Q D6 ──[ 330 Ω ]──►|── UNO Q GND
 
 ## Horn
 
+> **Status:** not wired for now. The game plays the wall-contact buzz itself, and the MCU horn and LED stay off (`McuConfig.feedback = false`). The circuits below are for when the horn is wired.
+
 ⚠ **Read the label first.** Which circuit fits depends on the horn:
 
 | Horn | Circuit |

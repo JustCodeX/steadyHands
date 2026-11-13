@@ -48,7 +48,9 @@ Controls without voice: tilt moves, the knob picks the instrument (while paused 
 
 Keyboard: arrows tilt (Shift = slow), Space = A, M = B, C = C, +/- turn the knob, Enter presses it. As if spoken: 1-4 call tools, L light, S steady, X cancel, R repeat, H help, N new game. Esc quits.
 
-Settings: copy the defaults from `trainer/core/config.py` into a TOML file and pass `--config file.toml` (or set `STEADYHANDS_CONFIG`). Typical overrides: `voice.input_device = "USB"`, `audio.output_device`, `game.speed_px_per_s`, `voice.confidence_threshold`.
+Settings: copy the defaults from `trainer/core/config.py` into a TOML file and pass `--config file.toml` (or set `STEADYHANDS_CONFIG`). Typical overrides: `voice.input_device = "USB"`, `audio.output_device`, `game.speed_px_per_s`, `voice.confidence_threshold`, `mcu.feedback = true` (once the horn and red LED are wired).
+
+Wall contact plays a generated buzz through the audio output (`trainer/audio/sound_service.py`, `make_buzz_bytes`). The MCU horn and LED are off unless `mcu.feedback` is `true`.
 
 ## Tests
 
