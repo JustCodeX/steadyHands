@@ -35,8 +35,10 @@ The setup needs the board password once (for `apt` and the autologin file). It d
 
 ## Running
 
+On the board the trainer starts with the desktop (`~/.config/autostart/steadyhands.desktop`, installed by the setup). To restart it by hand, stop the running one first; output goes to `app/logs/trainer.log`.
+
 ```sh
-app/run.sh                        # on the board: fullscreen on the HDMI display, MCU, voice, sound
+pkill -f '[-]m trainer'; app/run.sh    # on the board: fullscreen on the HDMI display, MCU, voice, sound
 app/run.sh --windowed -v          # window, verbose log
 python -m trainer --no-mcu --no-voice --windowed   # on a laptop: keyboard only
 ```

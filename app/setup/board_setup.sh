@@ -35,6 +35,10 @@ fi
 echo "== 4/5 models"
 setup/download_models.sh
 
+echo "== 4b/5 start the trainer with the desktop"
+mkdir -p ~/.config/autostart
+cp setup/steadyhands.desktop ~/.config/autostart/steadyhands.desktop
+
 echo "== 5/5 levels and patient lines"
 .venv/bin/python tools/make_levels.py
 .venv/bin/python tools/render_clips.py
