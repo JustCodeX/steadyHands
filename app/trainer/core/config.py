@@ -94,9 +94,10 @@ class VoiceConfig:
     # Spoken answer -> one of the question's options. "keyword" looks for the
     # options' phrases; "needle" is reserved (docs/needle-integration.md).
     evaluator: str = "keyword"
-    # "open": free speech. "keywords": the recogniser only knows the answer
-    # phrases and treats every other word as filler (more robust in noise).
-    answer_vocabulary: str = "open"
+    # "open": free speech; follows sentences but mishears rare words.
+    # "keywords": only the open question's answer phrases; knows the words
+    # but loses them inside a sentence. "both": the two hear the same audio.
+    answer_vocabulary: str = "both"
     answer_max_segment_s: float = 8.0
     answer_hangover_ms: int = 700  # people pause in the middle of a sentence
     answer_confidence_threshold: float = 0.5

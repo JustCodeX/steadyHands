@@ -33,7 +33,7 @@ def test_no_option_or_several_options_is_unclear():
 
 def test_an_exact_phrase_beats_a_near_miss_of_another_option():
     ev = KeywordEvaluator()
-    q = question("dark_wound")
+    q = Question(id="x", text="?", options={"light": ("light", "lamp"), "clamp": ("clamp",)}, correct="light")
     assert ev.evaluate(q, "a lamp please").choice == "light"  # not a misheard "clamp"
     assert ev.evaluate(q, "the clam").choice == "clamp"
 

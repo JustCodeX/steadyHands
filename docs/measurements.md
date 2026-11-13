@@ -40,6 +40,32 @@ rendered clips fit, but there is no room for several model candidates at once.
 | --- | --- | --- | --- |
 | | | | |
 
+### Quiz answers: which recogniser setting *(laptop, synthetic voices)*
+
+Measured 13 November 2026 on a laptop, not on the board: 492 answers spoken by
+two macOS voices (Samantha, Daniel) in clean audio, covering the first two
+phrases of every option of every question, each alone and inside two sentences
+("I think it is the clamp", "that would be clamp I guess"). Each went through
+the app's answer recogniser and `KeywordEvaluator`.
+
+| `voice.answer_vocabulary` | Right option | Unclear ("Pardon?") | Wrong option | Decode time / audio time |
+| --- | --- | --- | --- | --- |
+| `open` | 414 (84 %) | 78 | 0 | 0.05 |
+| `keywords` (per question) | 365 (74 %) | 127 | 0 | 0.02 |
+| `both` (default) | 472 (96 %) | 20 | 0 | 0.08 |
+
+The open vocabulary alone fails on the rare words ("clamp" → "plan", "swab" →
+"swag", "four" → "for"); the phrase-restricted recogniser alone loses a word
+in the middle of a sentence. Together they cover each other.
+
+⚠ This says which setting to start with, nothing more. The voices are
+synthetic, there is no room noise, and the six misheard words added to
+`questions.json` afterwards ("swag", "suave", "scalable", "clan", "claimed",
+"vain") came from these same recordings. The laptop is also several times
+faster than the board, so `both` may decode slower than real time there:
+check the answer latency below. The test with 20 answers spoken by a person on
+the board ([tests.md](tests.md)) is the one that counts.
+
 Quiz answers (end of speech to verdict, `answer_latency_ms`; answers are whole sentences, so segments are longer):
 
 | Tries | Median (ms) | Worst (ms) | Date / setup |

@@ -6,13 +6,17 @@
     "options": {
       "clamp": [
         "clamp",
-        "clamps"
+        "clamps",
+        "clan",
+        "claimed"
       ],
       "swab": [
         "swab",
         "swabs",
         "swap",
-        "sponge"
+        "sponge",
+        "swag",
+        "suave"
       ],
       "forceps": [
         "forceps",
@@ -20,7 +24,8 @@
       ],
       "scalpel": [
         "scalpel",
-        "knife"
+        "knife",
+        "scalable"
       ]
     },
     "correct": "clamp",
@@ -33,13 +38,17 @@
     "options": {
       "clamp": [
         "clamp",
-        "clamps"
+        "clamps",
+        "clan",
+        "claimed"
       ],
       "swab": [
         "swab",
         "swabs",
         "swap",
-        "sponge"
+        "sponge",
+        "swag",
+        "suave"
       ],
       "forceps": [
         "forceps",
@@ -47,7 +56,8 @@
       ],
       "scalpel": [
         "scalpel",
-        "knife"
+        "knife",
+        "scalable"
       ]
     },
     "correct": "forceps",
@@ -60,13 +70,17 @@
     "options": {
       "clamp": [
         "clamp",
-        "clamps"
+        "clamps",
+        "clan",
+        "claimed"
       ],
       "swab": [
         "swab",
         "swabs",
         "swap",
-        "sponge"
+        "sponge",
+        "swag",
+        "suave"
       ],
       "forceps": [
         "forceps",
@@ -74,7 +88,8 @@
       ],
       "scalpel": [
         "scalpel",
-        "knife"
+        "knife",
+        "scalable"
       ]
     },
     "correct": "swab",
@@ -87,13 +102,17 @@
     "options": {
       "clamp": [
         "clamp",
-        "clamps"
+        "clamps",
+        "clan",
+        "claimed"
       ],
       "swab": [
         "swab",
         "swabs",
         "swap",
-        "sponge"
+        "sponge",
+        "swag",
+        "suave"
       ],
       "forceps": [
         "forceps",
@@ -101,7 +120,8 @@
       ],
       "scalpel": [
         "scalpel",
-        "knife"
+        "knife",
+        "scalable"
       ]
     },
     "correct": "scalpel",
@@ -114,18 +134,21 @@
     "options": {
       "light": [
         "light",
-        "lights",
-        "lamp"
+        "lights"
       ],
       "swab": [
         "swab",
         "swabs",
         "swap",
-        "sponge"
+        "sponge",
+        "swag",
+        "suave"
       ],
       "clamp": [
         "clamp",
-        "clamps"
+        "clamps",
+        "clan",
+        "claimed"
       ]
     },
     "correct": "light",
@@ -263,7 +286,8 @@
       ],
       "veins": [
         "veins",
-        "vein"
+        "vein",
+        "vain"
       ],
       "capillaries": [
         "capillaries",

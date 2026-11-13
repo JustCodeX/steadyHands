@@ -38,7 +38,7 @@ from ..quiz.question import Question, QuestionBank
 from .audio_input import AudioInput
 from .command_matcher import CommandMatcher
 from .interpreter import CommandInterpreter
-from .recognizer import NullRecognizer, SpeechRecognizer
+from .recognizer import EnsembleRecognizer, NullRecognizer, SpeechRecognizer
 from .signal_processor import SignalProcessor
 from .vad import EnergyVad, Segmenter, VoiceActivityDetector
 
@@ -218,9 +218,11 @@ class VoiceService(Service):
             if not in_segment:
                 # A segment is a command or an answer from its first block to its last.
                 now_open = self._open_question()
-                if (now_open is None) != (question is None):
+                if now_open is not question:
                     self.segmenter.reset()
                     self.answer_segmenter.reset()
+                    if now_open is not None:
+                        self.answer_recognizer.set_vocabulary(now_open.keywords())
                 question = now_open
             segmenter = self.answer_segmenter if question is not None else self.segmenter
             recognizer = self.answer_recognizer if question is not None else self.recognizer
@@ -348,14 +350,19 @@ def build_evaluator(cfg: VoiceConfig) -> AnswerEvaluator:
 def build_answer_recognizer(cfg: VoiceConfig, questions: QuestionBank) -> SpeechRecognizer:
     """The recogniser for spoken quiz answers. It shares the model with the
     command recogniser, so it adds no second model to memory."""
-    if cfg.answer_vocabulary not in ("open", "keywords"):
+    if cfg.answer_vocabulary not in ("both", "open", "keywords"):
         raise ValueError(f"unknown answer_vocabulary: {cfg.answer_vocabulary}")
     if cfg.recognizer == "vosk" and len(questions):
         try:
             from .vosk_recognizer import VoskRecognizer
 
-            vocabulary = questions.keywords() if cfg.answer_vocabulary == "keywords" else None
-            return VoskRecognizer(cfg.model_dir, vocabulary, cfg.sample_rate)
+            members = []
+            if cfg.answer_vocabulary in ("both", "open"):
+                members.append(VoskRecognizer(cfg.model_dir, None, cfg.sample_rate))
+            if cfg.answer_vocabulary in ("both", "keywords"):
+                # narrowed to the open question's options when it is asked
+                members.append(VoskRecognizer(cfg.model_dir, questions.keywords(), cfg.sample_rate))
+            return members[0] if len(members) == 1 else EnsembleRecognizer(members)
         except Exception as exc:
             log.error("Vosk unavailable (%s); spoken answers disabled", exc)
     return NullRecognizer()

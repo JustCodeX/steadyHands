@@ -17,7 +17,7 @@ from trainer.core.events import (
 )
 from trainer.quiz import Question, QuestionBank
 from trainer.voice.audio_input import AudioInput, Decimator, usb_sound_card_present
-from trainer.voice.recognizer import SpeechRecognizer, Transcript
+from trainer.voice.recognizer import EnsembleRecognizer, SpeechRecognizer, Transcript
 from trainer.voice.signal_processor import SignalProcessor
 from trainer.voice.vad import EnergyVad, Segmenter
 from trainer.voice.voice_service import VoiceService, build_answer_recognizer, build_evaluator, build_interpreter, build_recognizer
@@ -389,13 +389,122 @@ def test_answer_recogniser_follows_the_config(monkeypatch):
             seen.append(phrases)
 
     monkeypatch.setattr(vosk_module, "VoskRecognizer", SpyRecognizer)
-    build_answer_recognizer(VoiceConfig(), QUIZ)
-    build_answer_recognizer(VoiceConfig(answer_vocabulary="keywords"), QUIZ)
+    both = build_answer_recognizer(VoiceConfig(), QUIZ)
+    assert isinstance(both, EnsembleRecognizer) and seen == [None, ["clamp", "sponge", "swab"]]
+    seen.clear()
+    assert isinstance(build_answer_recognizer(VoiceConfig(answer_vocabulary="open"), QUIZ), SpyRecognizer)
+    assert isinstance(build_answer_recognizer(VoiceConfig(answer_vocabulary="keywords"), QUIZ), SpyRecognizer)
     assert seen == [None, ["clamp", "sponge", "swab"]]
-    # no questions, no second recogniser
+    # no questions, no further recogniser
     build_answer_recognizer(VoiceConfig(), QuestionBank())
     assert len(seen) == 2
     with pytest.raises(ValueError):
         build_answer_recognizer(VoiceConfig(answer_vocabulary="huge"), QUIZ)
     with pytest.raises(ValueError):
         build_evaluator(VoiceConfig(evaluator="magic"))
+
+
+class ScriptedRecognizer(FakeRecognizer):
+    """Remembers what it was given, like a real recogniser would."""
+
+    def __init__(self, text, conf=0.9):
+        super().__init__(text, conf)
+        self.audio, self.vocabulary, self.resets = [], None, 0
+
+    def accept(self, pcm):
+        self.audio.append(pcm)
+
+    def set_vocabulary(self, phrases):
+        self.vocabulary = phrases
+
+    def reset(self):
+        self.resets += 1
+
+
+def test_ensemble_joins_what_its_members_heard():
+    sentence, words = ScriptedRecognizer("i think it is the plan", 0.9), ScriptedRecognizer("clamp", 0.7)
+    both = EnsembleRecognizer([sentence, words])
+    both.set_vocabulary(["clamp", "swab"])
+    both.reset()
+    both.accept(b"abc")
+    assert sentence.audio == words.audio == [b"abc"]
+    assert sentence.vocabulary == words.vocabulary == ["clamp", "swab"]
+    assert (sentence.resets, words.resets) == (1, 1)
+    heard = both.finish()
+    assert heard.text == "i think it is the plan clamp" and heard.confidence == 0.9
+    # a member that heard nothing does not dilute the result
+    quiet = EnsembleRecognizer([ScriptedRecognizer("", 0.0), ScriptedRecognizer("clamp", 0.8)]).finish()
+    assert (quiet.text, quiet.confidence) == ("clamp", 0.8)
+    silent = EnsembleRecognizer([ScriptedRecognizer("", 0.0), ScriptedRecognizer("", 0.0)]).finish()
+    assert (silent.text, silent.confidence) == ("", 0.0)
+
+
+def test_members_that_disagree_make_the_answer_unclear():
+    bus, svc, seen = answer_service("unused")
+    svc.answer_recognizer = EnsembleRecognizer([ScriptedRecognizer("the swab"), ScriptedRecognizer("clamp")])
+    assert heard(bus, svc, seen)[0].unclear
+    bus, svc, seen = answer_service("unused")
+    svc.answer_recognizer = EnsembleRecognizer([ScriptedRecognizer("that would be the plan"), ScriptedRecognizer("clamp")])
+    assert heard(bus, svc, seen)[0].correct
+
+
+class ScriptedAudio(FakeAudio):
+    """Plays a fixed list of microphone blocks into the voice thread."""
+
+    def __init__(self, blocks):
+        self.blocks = list(blocks)
+
+    def read(self, timeout=0.1):
+        return self.blocks.pop(0) if self.blocks else None
+
+
+def speech_then_silence(speech_blocks=30, silence_blocks=60):
+    rng = np.random.default_rng(1)
+    quiet = lambda: (0.002 * rng.standard_normal(320) * 32767).astype(np.int16)  # noqa: E731
+    loud = lambda: (0.2 * rng.standard_normal(320) * 32767).astype(np.int16)  # noqa: E731
+    return [quiet() for _ in range(10)] + [loud() for _ in range(speech_blocks)] + [quiet() for _ in range(silence_blocks)]
+
+
+def run_voice_thread(question_open):
+    import time
+
+    bus = EventBus()
+    commands, answers = ScriptedRecognizer("clamp"), ScriptedRecognizer("i would take the clamp")
+    svc = VoiceService(
+        bus,
+        VoiceConfig(),
+        DEFAULT_COMMANDS,
+        recognizer=commands,
+        audio=ScriptedAudio(speech_then_silence()),
+        questions=QUIZ,
+        answer_recognizer=answers,
+    )
+    seen = []
+    bus.subscribe(AnswerEvent, seen.append)
+    bus.subscribe(CommandEvent, seen.append)
+    bus.publish(ListenRequest(on=True))
+    if question_open:
+        bus.publish(QuestionAsked(question_id="bleed"))
+    bus.dispatch()
+    svc.start()
+    try:
+        deadline = time.monotonic() + 3.0
+        while not seen and time.monotonic() < deadline:
+            bus.dispatch()
+            time.sleep(0.01)
+    finally:
+        svc.stop()
+    return seen, commands, answers
+
+
+def test_voice_thread_sends_speech_to_the_answer_recogniser_while_a_question_is_open():
+    seen, commands, answers = run_voice_thread(question_open=True)
+    assert len(seen) == 1 and isinstance(seen[0], AnswerEvent) and seen[0].correct
+    assert answers.vocabulary == ["clamp", "swab", "sponge"]  # narrowed to this question's options
+    assert answers.audio and not commands.audio
+
+
+def test_voice_thread_sends_speech_to_the_command_recogniser_otherwise():
+    seen, commands, answers = run_voice_thread(question_open=False)
+    assert len(seen) == 1 and isinstance(seen[0], CommandEvent) and seen[0].word == "clamp"
+    assert commands.audio and not answers.audio and answers.vocabulary is None

@@ -10,7 +10,7 @@ Every feature is a class derived from `Service`. Services are registered with `A
 | --- | --- |
 | `trainer/core/` | `App`, `Service`, `EventBus`, the event dataclasses, `config.py` (every setting, TOML overrides) |
 | `trainer/hardware/` | `McuLink` (Bridge client), `KeyboardInput` (dev mode and demo fallback) |
-| `trainer/voice/` | `AudioInput`, `SignalProcessor` (high-pass, level normalisation), `EnergyVad` + `Segmenter`, `SpeechRecognizer` → `VoskRecognizer` / `NullRecognizer`, `CommandInterpreter` → `CommandMatcher`, `VoiceService` |
+| `trainer/voice/` | `AudioInput`, `SignalProcessor` (high-pass, level normalisation), `EnergyVad` + `Segmenter`, `SpeechRecognizer` → `VoskRecognizer` / `EnsembleRecognizer` / `NullRecognizer`, `CommandInterpreter` → `CommandMatcher`, `VoiceService` |
 | `trainer/quiz/` | `Question` + `QuestionBank` (`assets/questions.json`), `AnswerEvaluator` → `KeywordEvaluator` |
 | `trainer/audio/` | `lines.py` (every spoken line), `ClipLibrary`, `PhraseBuilder`, `SoundService`, `TtsRenderer` (setup only) |
 | `trainer/game/` | `GameEngine`, `GameState`, `SoloMode` / `CoopMode`, `Level` + `LevelCatalog`, `CollisionMap`, `Patient`, `TrainingMetrics`, `QuizDirector` (when to ask, answer window), `Stress`, `ActionCatalog` (the commands as tool schemas) |

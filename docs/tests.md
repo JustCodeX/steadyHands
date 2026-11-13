@@ -31,10 +31,11 @@ Evidence for the criteria check. One line per run, with date and who ran it.
 
 ## Quiz answers in whole sentences (20 answers)
 
-With `voice.answer_vocabulary = "open"` (the default). Run with `--config debug-asr.toml` to see what the recogniser heard; add phrases it mishears to the option in `app/assets/questions.json`. If fewer than 16 of 20 are right, repeat with `answer_vocabulary = "keywords"` and keep the better setting.
+With `voice.answer_vocabulary = "both"` (the default). Run with `--config debug-asr.toml` to see what the recognisers heard; add words they mishear to the option's phrases in `app/assets/questions.json`. Try `"open"` and `"keywords"` only if `"both"` gives wrong verdicts or is too slow.
 
 | Setting | Tries | Right verdict | Wrong verdict | Unclear ("Pardon?") | Not heard |
 | --- | --- | --- | --- | --- | --- |
+| both | | | | | |
 | open | | | | | |
 | keywords | | | | | |
 

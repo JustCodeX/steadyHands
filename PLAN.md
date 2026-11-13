@@ -422,7 +422,7 @@ The events on the bus are the interface tables above, written as classes: `Input
 2. **Signal processing:** a high-pass filter (removes rumble below about 100 Hz) and level normalisation, so that quiet and loud speakers are handled the same way.
 3. **Gate:** voice activity detection (Silero VAD or WebRTC VAD). Speech-to-text runs only on detected speech segments.
 4. **Speech-to-text (❓ D2, Timon):** the default in the code is `VoskRecognizer` (Vosk small English with its vocabulary restricted to our command phrases). Restricting the vocabulary makes recognition more robust, and the model is small. Alternatives (Whistle, Whisper tiny) are further `SpeechRecognizer` subclasses, selected with `voice.recognizer` in the config. Whatever is chosen gets measured in M0 on 20 spoken commands with real hall noise.
-5. **Spoken answers:** while a quiz question is open, speech is an answer and not a command. A second recogniser hears it, without the restricted vocabulary so that whole sentences work. It uses the same loaded Vosk model, so it adds no second model to memory or disk, and it runs only during the answer window. An `AnswerEvaluator` then maps the sentence to one of the question's options; the default looks for the options' phrases, and a tool-calling model can replace it ([docs/needle-integration.md](docs/needle-integration.md)). If free speech proves unreliable in hall noise, `voice.answer_vocabulary = "keywords"` restricts this recogniser to the answer phrases.
+5. **Spoken answers:** while a quiz question is open, speech is an answer and not a command. Two more recognisers hear it together (`voice.answer_vocabulary = "both"`): one with the open vocabulary, which follows whole sentences but mishears rare words ("clamp" becomes "plan"), and one restricted to the open question's answer phrases, which knows the words but loses them inside a sentence. What both heard is joined. They use the same loaded Vosk model, so they add no second model to memory or disk, and they run only during the answer window. An `AnswerEvaluator` then maps the text to one of the question's options; the default looks for the options' phrases, and a tool-calling model can replace it ([docs/needle-integration.md](docs/needle-integration.md)). An answer that names no option, or two, is unclear and is asked for again, which is also what happens when the two recognisers contradict each other.
 6. **Response:** every recognised command appears on screen. Target: under 1 s from the end of a word to the tool change (to be measured).
 7. **Text-to-speech:** Piper with an English voice. We render all patient lines to WAV once at setup, so the game only plays files and there is no speech synthesis during play.
 8. **Privacy and security:**
@@ -465,7 +465,7 @@ The 4 GB RAM is shared by Debian, the desktop, the game, and speech. We measure 
 | Speech-to-text: Vosk small | Around 300 MB | Hackathon README, model catalogue |
 | Piper | Runs only at setup, to pre-render the patient lines; not loaded during play | |
 | VAD | Small; measure | |
-| Second Vosk recogniser for quiz answers | Shares the loaded model; measure the difference | |
+| Vosk recognisers for quiz answers (open vocabulary, and one per question's answer phrases) | Share the loaded model. On a laptop: 1.7 MB for the open one, 0.2 MB per phrase list. Measure on the board | Laptop measurement, 13 Nov |
 | Game (pygame) | Measure | |
 
 Leaving out an LLM saves the most: the README estimates about 1 GB of RAM for a 1B model.
@@ -475,7 +475,7 @@ Leaving out an LLM saves the most: the README estimates about 1 GB of RAM for a 
 **What we do:**
 - Speech-to-text runs only during a round, and only when VAD detects speech.
 - A fixed command list allows a small model.
-- The open-vocabulary recogniser for quiz answers runs only while a question is open, behind the same VAD.
+- The recognisers for quiz answers run only while a question is open, behind the same VAD.
 - Patient lines are pre-rendered; there is no text-to-speech during play.
 - Rendering is capped at 30 fps. The map is pre-rendered, so only the moving parts are redrawn.
 - The MCU filters the sensors and sends 50 frames per second, so Linux does not poll.

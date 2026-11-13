@@ -20,17 +20,35 @@ class VoskRecognizer(SpeechRecognizer):
     _models: dict[str, object] = {}
 
     def __init__(self, model_dir: str | Path, phrases: list[str] | None, sample_rate: int = 16000) -> None:
-        from vosk import KaldiRecognizer
-
         self._model = self._load_model(Path(model_dir))
+        self._sample_rate = sample_rate
+        self._restricted = phrases is not None
+        self._by_vocabulary: dict[tuple[str, ...], object] = {}  # one Kaldi recogniser per phrase list
         if phrases is None:
+            from vosk import KaldiRecognizer
+
             self._rec = KaldiRecognizer(self._model, sample_rate)
+            self._rec.SetWords(True)
             log.info("Vosk recogniser with open vocabulary")
         else:
-            grammar = json.dumps(sorted(set(phrases)) + ["[unk]"])
-            self._rec = KaldiRecognizer(self._model, sample_rate, grammar)
+            self.set_vocabulary(phrases)
             log.info("Vosk recogniser restricted to %d phrases", len(set(phrases)))
-        self._rec.SetWords(True)
+
+    def set_vocabulary(self, phrases: list[str]) -> None:
+        """Switch a restricted recogniser to another phrase list. Each list gets
+        its own Kaldi recogniser on the shared model, built once and kept (a
+        few hundred kB each)."""
+        if not self._restricted:
+            return
+        key = tuple(sorted(set(phrases)))
+        if key not in self._by_vocabulary:
+            from vosk import KaldiRecognizer
+
+            rec = KaldiRecognizer(self._model, self._sample_rate, json.dumps(list(key) + ["[unk]"]))
+            rec.SetWords(True)
+            self._by_vocabulary[key] = rec
+        self._rec = self._by_vocabulary[key]
+        self._rec.Reset()
 
     @classmethod
     def _load_model(cls, model_dir: Path):
