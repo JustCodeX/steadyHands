@@ -32,7 +32,7 @@ cd ~/promptpimps-unoq/app
 setup/board_setup.sh       # apt packages (sudo), autologin for :0, venv, models, levels, clips
 ```
 
-The setup needs the board password once (for `apt`, the autologin file, and the USB host-mode service). The board's USB-C port falls back to device mode, which disconnects the hub's USB devices (headset, touch); USB adb does the same, so adbd is disabled and a small root service keeps the port in host mode. Use SSH (`BOARD_SSH`) instead of USB adb on a board set up this way. It downloads the Vosk small English model (40 MB) and the Piper voice (60 MB) into `app/models/` (git-ignored) and renders every patient line to `assets/clips/` once. Nothing is downloaded or synthesised during play.
+The setup needs the board password once (for `apt`, the autologin file, and the USB host-mode service). The board's USB-C port falls back to device mode, which disconnects the hub's USB devices (headset, touch); USB adb does the same, so adbd is disabled and a small root service keeps the port in host mode. The same service restarts the port when the hub fails to connect the headset or the touch panel at boot (see [the cheat sheet](../docs/board-cheatsheet.md#no-sound-in-the-headset)). Use SSH (`BOARD_SSH`) instead of USB adb on a board set up this way. It downloads the Vosk small English model (40 MB) and the Piper voice (60 MB) into `app/models/` (git-ignored) and renders every patient line to `assets/clips/` once. Nothing is downloaded or synthesised during play.
 
 ## Running
 
@@ -48,7 +48,7 @@ Controls without voice: tilt moves, the knob picks the instrument (while paused 
 
 Keyboard: arrows tilt (Shift = slow), Space = A, M = B, C = C, +/- turn the knob, Enter presses it. As if spoken: 1-4 call tools, L light, S steady, X cancel, R repeat, H help, N new game. Esc quits.
 
-Settings: copy the defaults from `trainer/core/config.py` into a TOML file and pass `--config file.toml` (or set `STEADYHANDS_CONFIG`). Typical overrides: `voice.input_device = "USB"`, `audio.output_device`, `game.speed_px_per_s`, `voice.confidence_threshold`, `mcu.feedback = true` (once the horn and red LED are wired).
+Settings: copy the defaults from `trainer/core/config.py` into a TOML file and pass `--config file.toml` (or set `STEADYHANDS_CONFIG`). Typical overrides: `voice.input_device = ""` (default input instead of the USB headset), `audio.output_device`, `game.speed_px_per_s`, `voice.confidence_threshold`, `mcu.feedback = true` (once the horn and red LED are wired).
 
 Wall contact plays a generated buzz through the audio output (`trainer/audio/sound_service.py`, `make_buzz_bytes`). The MCU horn and LED are off unless `mcu.feedback` is `true`.
 
