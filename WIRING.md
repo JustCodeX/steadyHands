@@ -40,7 +40,7 @@ flowchart LR
 | --- | --- | --- |
 | USB-C | Hub | The board's only USB port: power in, plus HDMI over DisplayPort Alt Mode, plus USB devices |
 | Qwiic | Modulino chain | I2C bus `Wire1`, 3.3 V. Not `Wire`. |
-| Header pins (D0–D21, 5V, GND) | Nothing | No wire goes to the headers. The horn and the red LED were removed: the wall-contact buzz plays in the game. |
+| Header pins (D0–D21, 5V, GND) | Nothing | No wire goes to the headers |
 
 Logic level is **3.3 V**. Do not connect any 5 V signal to an input. All sensors go through Qwiic at 3.3 V, so this only matters for extra wiring.
 
