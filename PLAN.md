@@ -15,11 +15,12 @@ A working prototype of a surgeon trainer: you guide a surgical instrument throug
 - **It gives measurable feedback.** After each round, the trainer shows time, wall contacts, steadiness, and instrument calls, so trainees can see their progress (see [Training feedback](#training-feedback)).
 - **It is cheap, offline, and private.** It uses off-the-shelf parts and needs no internet or cloud, and it stores no audio. Training centres and medical schools with small budgets or poor connectivity can build and use it.
 - **It is energy-aware.** Speech recognition runs only while a round is in progress and someone is speaking, and we measure the energy used (see [Energy and environment](#energy-and-environment)).
-- ✅ **Target group:** medical students and operating-room trainees. This is a prototype, and we claim no proven training effect.
+- ✅ **Target group and situation:** medical students and operating-room trainees during a practice session in a skills lab. This is a prototype, and we claim no proven training effect.
+- **Why offline and privacy matter to them:** a trainee's voice recordings are personal data. The trainer needs no cloud account, no network access, and no handling of recordings, which makes it easier to use in hospitals and universities with strict IT and data-protection rules.
 
 **Pitch sentence**, using the template from the hackathon README:
 
-> For **medical students preparing for the operating room**, we help them **train steady hands and clear instrument calls** through speech, because **in surgery both hands are busy and instruments are requested by voice**, while keeping **their voices on the device**.
+> For **medical students in a skills-lab practice session**, we help them **train steady hands and clear instrument calls** through speech, because **in surgery both hands are busy and instruments are requested by voice**, while keeping **their voices on the device**.
 
 ## Decisions
 
@@ -38,12 +39,13 @@ A working prototype of a surgeon trainer: you guide a surgical instrument throug
 | ❓ D3 Name | "Steady Hands" is a placeholder |
 | ❓ D4 Audio for the audience | Headset audio only reaches the person wearing it. Does the display have an audio jack, or can we get a USB speaker? |
 | ❓ D5 License for our code | Must fit the licenses of the models we use (see [Licenses](#licenses)) |
+| ❓ D6 Publishing | Make this repo public at the end, or publish a public copy (see [Publishing](#publishing)) |
 
 ## Gameplay
 
 ### One-player mode
 
-The surgeon holds the **instrument**, a handle containing the Modulino Movement, and tilts it to steer the tool tip through the corridors of the patient map. The surgeon wears the headset and calls for tools. Touching a wall sounds the horn, flashes the red LED, makes the patient react ("Ouch!"), and raises the patient's heart rate. After three touches, the patient wakes up and the round is lost. Removing every item before time runs out wins.
+The surgeon holds the **instrument**, a handle containing the Modulino Movement, and tilts it to steer the tool tip through the corridors of the patient map. The surgeon wears the headset and calls for tools. Touching a wall sounds the horn, flashes the red LED, makes the patient react ("Ouch!"), and raises the patient's heart rate. After three touches, the patient wakes up and the round is lost. Removing every item before time runs out wins. A round lasts about 60 seconds, so a trainee gets feedback within the first minute.
 
 ### Co-op mode (two players)
 
@@ -99,6 +101,8 @@ After each round, the screen shows:
 | Precision help | How often `steady` was used |
 
 Levels get harder step by step, with narrower corridors and less time. Results are kept as numbers for the current session only. No audio and no personal data are stored.
+
+The trainer also speaks the result, for example "48 seconds, two contacts, steady hands". The sentence is put together from pre-rendered clips of numbers and phrases, so no speech synthesis runs during play.
 
 ## Architecture
 
@@ -161,13 +165,18 @@ The workshop slides changed the picture. The organisers' speech examples (Whistl
 ## Speech pipeline
 
 1. **Mic:** headset, 16 kHz mono, read only while a round runs.
-2. **Gate:** voice activity detection (Silero VAD or WebRTC VAD). Speech-to-text runs only on detected speech segments.
-3. **Speech-to-text (❓ D2):** we test both options in M0 on 20 spoken commands with real hall noise, then pick one.
+2. **Signal processing:** a high-pass filter (removes rumble below about 100 Hz) and level normalisation, so that quiet and loud speakers are handled the same way.
+3. **Gate:** voice activity detection (Silero VAD or WebRTC VAD). Speech-to-text runs only on detected speech segments.
+4. **Speech-to-text (❓ D2):** we test both options in M0 on 20 spoken commands with real hall noise, then pick one.
    - **Whistle** (Cactus Compute; 16.9 MB model; 7 languages). The workshop shows it running on the UNO Q's Linux side, and the slides link the project. It transcribes freely, and we match the text against the command list.
    - **Vosk small English** with its vocabulary restricted to our commands. Restricting the vocabulary makes recognition more robust, and the model is small.
-4. **Response:** every recognised command appears on screen. Target: under 1 s from the end of a word to the tool change (to be measured).
-5. **Text-to-speech:** Piper with an English voice. We render all patient lines to WAV once at setup, so the game only plays files and there is no speech synthesis during play.
-6. **Privacy:** audio exists only in memory. It is never written to disk and never sent anywhere.
+5. **Response:** every recognised command appears on screen. Target: under 1 s from the end of a word to the tool change (to be measured).
+6. **Text-to-speech:** Piper with an English voice. We render all patient lines to WAV once at setup, so the game only plays files and there is no speech synthesis during play.
+7. **Privacy and security:**
+   - Audio exists only in memory. It is never written to disk and never sent anywhere.
+   - Transcripts are not logged either. The log contains only the recognised command word and its timing.
+   - During play, the trainer needs no network and exposes no network services. In demo mode, Wi-Fi is switched off where possible, which also saves energy.
+   - Training scores are kept for the current session only.
 
 No LLM: the patient's lines are scripted. This saves the most energy and keeps response times short.
 
@@ -223,6 +232,8 @@ Leaving out an LLM saves the most: the README estimates about 1 GB of RAM for a 
 - Energy per round in Wh.
 - The saving from VAD, compared with running speech-to-text all the time.
 - CPU use per state, as a software measure that does not need the multimeter.
+- Latency from the end of speech to the command, and to the start of the patient's reply: median and worst value over 20 tries.
+- RAM use per state (see [Memory budget](#memory-budget)).
 
 We show the measured values in the demo. Only measured numbers go into the pitch.
 
@@ -242,6 +253,15 @@ The event encourages publishing the build as open source. Before we publish, we 
 
 Models are never committed to the repo (see `.gitignore`). The setup scripts download them, so the repo only needs a license for our own code.
 
+### Publishing
+
+The event encourages publishing the build. By the end of the event, we publish:
+- the code with a `LICENSE` file (D5),
+- the build guide: README, [WIRING.md](WIRING.md), and the setup steps,
+- the measured values for energy, latency, and RAM.
+
+❓ D6: make this repo public, or publish a cleaned-up public copy. Before it goes public, the repo must contain no secrets, recordings, or model files.
+
 ## Work split
 
 | Person | Area | Done when |
@@ -257,10 +277,22 @@ Event end: 14 November, 12:00. The exact build cutoff is not published; ask the 
 
 | Milestone | Target | Done when |
 | --- | --- | --- |
-| **M0 Risk tests** | 13 Nov, about 15:00 | Each person has proven their riskiest part on the real board: a spoken word is recognised from the headset; tilt values arrive on Linux; a window appears full-screen on the Elecrow; the horn and LED switch. D1 and D2 decided. |
+| **M0 Risk tests** | 13 Nov, about 15:00 | Each person has proven their riskiest part on the real board: a spoken command from the headset produces a spoken reply on the board (the README's first milestone), with latency measured; tilt values arrive on Linux; a window appears full-screen on the Elecrow; the horn and LED switch. D1 and D2 decided. |
 | **M1 First playable** | 13 Nov, about 20:00 | One-player mode works for one level: tilt steers, a wall touch sounds the horn and lights the LED, and one voice command changes the tool |
 | **M2 Feature complete** | 14 Nov, about 03:00 | All commands including `cancel`; voice states visible on screen and LED; "Pardon?" for misheard speech; patient lines; three levels; co-op; idle mode |
-| **M3 Demo ready** | 14 Nov, about 09:00 | Measured values in hand; polish done; demo script rehearsed. After that, only bug fixes. |
+| **M3 Demo ready** | 14 Nov, about 09:00 | Every row in the [criteria check](#hackathon-criteria-check) verified on the board; 10 demo runs in a row without a restart; measured values in the README; demo script rehearsed in under 2 minutes; build published (D6). After that, only bug fixes. |
+
+**Core first:** no optional feature (distance sensor, scalpel, co-op extras) starts before M1 works.
+
+## Demo script (2 minutes)
+
+| Time | What happens | Shows criteria |
+| --- | --- | --- |
+| 0:00–0:15 | The problem: operating-room trainees need steady hands and clear instrument calls. We built an offline trainer on the UNO Q. | U1, U4 |
+| 0:15–1:15 | One live round: tilt the instrument; call "forceps"; touch a wall (horn, LED, "Ouch!"); say something unclear (the patient asks "Pardon?"); say `cancel`; remove the item. The voice states are visible throughout. | U2, P1, P3–P6 |
+| 1:15–1:35 | Feedback screen plus the spoken result | U3, P1, P2 |
+| 1:35–1:50 | Measured values: energy per round, latency, RAM. Wi-Fi is off, and nothing leaves the board. | C1–C4, P6–P8 |
+| 1:50–2:00 | Co-op call-back in one sentence; the build is open source | C5 |
 
 ## Risks and fallbacks
 
@@ -273,32 +305,67 @@ Event end: 14 November, 12:00. The exact build cutoff is not published; ask the 
 | Horn needs more than 5 V or too much current | Driver with a MOSFET, or replace it with a 5 V buzzer (see [WIRING.md](WIRING.md#horn)) |
 | Not enough time | Cut in this order: distance sensor, scalpel, co-op extras. One-player mode with three tools is the minimum version. |
 
+## Definition of done
+
+The project is finished only when **every row in the criteria check below is ✅**. A row turns ✅ only after it has been tested on the real board and the evidence is recorded: a measured value, a test run, or a link. A feature that is built but not yet tested stays 🟡. When the organisers publish their judging criteria, we add them to the table as well.
+
 ## Hackathon criteria check
 
-The requirements come from the hackathon README: the event constraints plus our own proposed team requirements.
+Sources: the event constraints and our proposed team requirements from the hackathon README. Status: ⬜ planned · 🟡 built, not yet verified · ✅ verified on the board.
 
-| Requirement | How we meet it | Where |
-| --- | --- | --- |
-| Builds on the UNO Q | Game, speech, and sensors all run on the UNO Q | [Architecture](#architecture) |
-| Voice processed locally; no audio stored or sent to the cloud | Audio exists only in memory; no network needed during play | [Speech pipeline](#speech-pipeline) |
-| Energy-aware inference, measured | VAD gating, pre-rendered patient lines, idle mode, no LLM; measured per state | [Energy and environment](#energy-and-environment) |
-| Open source, published | Code and docs public; model licenses checked | [Licenses](#licenses) |
-| Speech helps the user (hands or eyes busy) | Both hands steer, so instruments are called by voice, as in a real operating room | [Why it is worth building](#why-it-is-worth-building) |
-| One specific user group and situation | Medical students and operating-room trainees, training steady hands and instrument calls | [Why it is worth building](#why-it-is-worth-building) |
-| Clear benefit, visible quickly | Feedback after every round: time, wall contacts, steadiness | [Training feedback](#training-feedback) |
-| Help, repeat, cancel | Voice commands `help`, `repeat`, `cancel` | [Voice commands](#voice-commands) |
-| Visible listening, processing, and speaking states | Microphone icon on screen and on-board RGB LED 4 | [Speech interaction](#speech-interaction) |
-| Recovery from misheard speech | Confidence threshold, "Pardon?", list of fitting commands, `cancel`, button fallback | [Speech interaction](#speech-interaction) |
-| Response within 3–5 s | Target under 1 s for commands; measured in M0 | [Speech interaction](#speech-interaction) |
-| Fits in 4 GB RAM | Memory budget with at least 1 GB free | [Memory budget](#memory-budget) |
-| Minimum version without an unrestricted LLM | No LLM at all; patient lines are scripted | [Speech pipeline](#speech-pipeline) |
-| Four parallel work areas with clear interfaces | Work split plus interface tables | [Work split](#work-split), [Interfaces](#interfaces-agree-on-these-first-so-we-can-work-in-parallel) |
-| Demo of the value in two minutes | Demo script in M3 | [Milestones](#milestones) |
+### Event and constraints
+
+| ID | Requirement | How we meet it | Evidence for ✅ | Status |
+| --- | --- | --- | --- | --- |
+| E1 | Local AI speech prototype on the UNO Q | Speech-to-text, game, and speech output run on the UNO Q | Demo runs with the board as the only computer | ⬜ |
+| E2 | Working prototype and live demo after 24 hours | Milestones M0–M3, [demo script](#demo-script-2-minutes) | Demo run at the event | ⬜ |
+| E3 | Team of four | Four work areas, which can be merged if fewer people work on them | [Work split](#work-split) assigned | ⬜ |
+| E4 | Uses the event's topics | Signal processing (high-pass filter, VAD), speech-to-text, speech output | Pipeline runs on the board | ⬜ |
+| C1 | Runs on the UNO Q within 4 GB RAM | [Memory budget](#memory-budget) with at least 1 GB free | `free -m` per state | ⬜ |
+| C2 | Voice captured, processed, and synthesised locally; no audio leaves the device or is stored | Audio only in memory; no cloud; no network during play | No audio files on disk after a session; demo with Wi-Fi off | ⬜ |
+| C3 | Energy-aware: measure and minimise | VAD gating, pre-rendered speech, idle mode, no LLM ([Energy](#energy-and-environment)) | Power per state, energy per round, and the saving from VAD, all measured | ⬜ |
+| C4 | Secure processing and ownership of voice data | No transcripts in logs; no network services; scores for the session only | Log contains only command words and timings | ⬜ |
+| C5 | Open source, published back to the community | `LICENSE`, build guide, public repo or public copy ([Publishing](#publishing)) | Public link (D6) | ⬜ |
+
+### User value
+
+| ID | Requirement | How we meet it | Evidence for ✅ | Status |
+| --- | --- | --- | --- | --- |
+| U1 | One specific user group in one concrete situation | Medical students and operating-room trainees in a skills-lab practice session | Pitch sentence in the demo | ⬜ |
+| U2 | Speech helps (hands or eyes busy) | Both hands steer; instruments are called by voice | A demo round played without pressing any buttons | ⬜ |
+| U3 | Clear benefit within one minute | Rounds of about 60 s, with feedback right after | Timed demo round | ⬜ |
+| U4 | Offline operation or privacy is valuable to the user | No recordings and no cloud, so it fits strict hospital IT and data-protection rules | Pitch; demo with Wi-Fi off | ⬜ |
+
+### Prototype behaviour
+
+| ID | Requirement | How we meet it | Evidence for ✅ | Status |
+| --- | --- | --- | --- | --- |
+| P1 | Spoken input with a meaningful spoken response | Patient reactions, `help`, spoken round result | Demo round | ⬜ |
+| P2 | One end-to-end task, done reliably | One-player round from start to feedback | 10 runs in a row without a restart | ⬜ |
+| P3 | Help, repeat, cancel | [Voice commands](#voice-commands) `help`, `repeat`, `cancel` | Each tested 5 times | ⬜ |
+| P4 | Listening, processing, and speaking states visible | Microphone icon on screen, on-board RGB LED 4 ([Speech interaction](#speech-interaction)) | Every state seen in a demo round | ⬜ |
+| P5 | Graceful recovery from misheard speech | Confidence threshold, "Pardon?", hint with fitting commands, `cancel`, button fallback | Test with wrong and unclear words | ⬜ |
+| P6 | Response within 3–5 s after speech ends | Target under 1 s; pre-rendered replies | Median and worst value over 20 tries | ⬜ |
+| P7 | Local within 4 GB RAM; no stored audio; no cloud | Covered by C1 and C2 | Evidence from C1 and C2 | ⬜ |
+| P8 | Available peripherals and open-source components; latency and energy measured | Modulinos, headset, display; open models; measurement plan | Measured values in the README | ⬜ |
+
+### Delivery
+
+| ID | Requirement | How we meet it | Evidence for ✅ | Status |
+| --- | --- | --- | --- | --- |
+| T1 | Feasible for four people in 24 hours, in parallel areas with clear interfaces | [Work split](#work-split) and [interface tables](#interfaces-agree-on-these-first-so-we-can-work-in-parallel) | Interfaces agreed at M0 | ⬜ |
+| T2 | Value and a clear success visible in two minutes | [Demo script](#demo-script-2-minutes) | Rehearsed run under 2:00 | ⬜ |
+| T3 | Minimum version without an unrestricted LLM | No LLM at all; patient lines are scripted | No LLM in the code | ⬜ |
+| T4 | Optional features only after the core works | Core-first rule in the [milestones](#milestones) | Optional work starts only after M1 | ⬜ |
+| T5 | First milestone: spoken input gives a local spoken response on the board; then measure latency | M0 | Test log with latency | ⬜ |
 
 ## Questions for the organisers
 
 - Judging criteria and their weights; exact build cutoff; demo format and length.
 - Is a particular license required for the published build?
+- Are AI coding tools and pre-existing code allowed, and do we have to disclose them?
+- Do we have to use a particular model?
+- Do the privacy rules allow training scores kept for the session only (numbers, no audio), and recognised command words shown on screen?
 - Can we borrow a USB-C power meter? A multimeter alone cannot easily measure the whole setup (see [WIRING.md](WIRING.md#energy-measurement-with-the-peaktech)).
 - Is training in the cloud (for example Edge Impulse) allowed during development, given that no voice data may leave the device during use?
 

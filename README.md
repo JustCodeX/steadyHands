@@ -22,7 +22,9 @@ You guide a surgical instrument through a patient map on a 7-inch screen by tilt
 
 ## Status
 
-Planning (13 November). Decided: a surgeon-training prototype for medical students; English; one-player mode with optional co-op; mic listening during play. Still open: toolchain (D1) and speech-to-text engine (D2); see [PLAN.md](PLAN.md#decisions).
+Planning (13 November). Decided: a surgeon-training prototype for medical students; English; one-player mode with optional co-op; mic listening during play.
+
+**Definition of done:** the project is finished only when every hackathon criterion in the [criteria check](PLAN.md#hackathon-criteria-check) is verified on the real board. Still open: toolchain (D1) and speech-to-text engine (D2); see [PLAN.md](PLAN.md#decisions).
 
 The MCU toolchain works: the starter sketch builds and flashes with PlatformIO on the board.
 
