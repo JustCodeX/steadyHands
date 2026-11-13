@@ -33,7 +33,8 @@ A working prototype of a surgeon trainer: you guide a surgical instrument throug
 | ✅ Audio | Headset |
 | ✅ Display | Elecrow 7" IPS, HDMI, 1024×600 |
 | ✅ Energy measurement | PeakTech digital multimeter (see [WIRING.md](WIRING.md#energy-measurement-with-the-peaktech)) |
-| ❓ D1 Toolchain | App Lab app, or PlatformIO sketch plus standalone Python (see [D1](#d1-toolchain)) |
+| ✅ D1 Toolchain | PlatformIO for the MCU sketch, plus a standalone Python app on the Linux side (see [D1](#d1-toolchain-platformio)) |
+| ✅ Code style | Object-oriented and modular: every feature is a class behind an interface (see [Code design](#code-design)) |
 | ❓ D2 Speech-to-text | Whistle or Vosk, chosen after the M0 test (see [Speech pipeline](#speech-pipeline)) |
 | ✅ Purpose | Working prototype of a surgeon trainer, inspired by Dr. Bibber |
 | ❓ D3 Name | "Steady Hands" is a placeholder |
@@ -148,19 +149,259 @@ Inside Linux, between the voice service and the game:
 | Game → voice | `listen` | `on`/`off`: listening runs only during a round |
 | Game → sound | `event` | `hit`, `item_out`, `win`, `lose`, `help`, ... → plays the matching patient line |
 
-### D1 Toolchain
+### D1 Toolchain: PlatformIO
 
-The workshop slides changed the picture. The organisers' speech examples (Whistle speech-to-text, "Hey Arduino" keyword spotting) and the Python side of the Bridge are **App Lab apps**. When an App Lab app starts, App Lab compiles and flashes **its own** sketch. That would overwrite a sketch flashed with PlatformIO.
+- **MCU:** the sketch in `firmware/` is built and flashed with PlatformIO, through `firmware/tools/board.sh` on the board's Linux side. This already works.
+- **Linux side:** a standalone Python app in `app/`. Our class `McuLink` talks to the MCU over the Bridge (the board's router socket). It replaces App Lab's Bridge library.
+- **Organiser examples:** we port Whistle speech-to-text into our app as a `SpeechRecognizer` subclass.
+- ⚠ **Do not start App Lab apps on the board.** When an App Lab app starts, App Lab flashes its own sketch and overwrites ours. `tools/board.sh upload` puts ours back.
+- If the Bridge or Modulino library does not work with PlatformIO, see [Risks and fallbacks](#risks-and-fallbacks).
 
-| | Option A: App Lab app | Option B: PlatformIO + standalone Python |
-| --- | --- | --- |
-| MCU sketch | `sketch/` in the app, built by App Lab | `firmware/` (already builds and flashes) |
-| Linux side | Python app in App Lab's container; Bridge library included | Our own Python environment; we write a client for the Bridge socket |
-| Organiser examples | Usable directly | Have to be ported |
-| Help from mentors | Yes | Hardly; the platform is unofficial |
-| Workflow | Edit in VS Code, deploy with `arduino-app-cli` over adb (script to be written) | `firmware/tools/board.sh` |
+## Code design
 
-**Recommendation:** Option A. It is the official path, the examples work in it as they are, and the Arduino mentors at the event can help. The architecture and interfaces above stay the same either way. ❓ Decide at the start of M0.
+All code is **object-oriented and modular**. Every feature is its own class behind a small interface, so features can be added or swapped without changing the others.
+
+**Rules:**
+- One class, one job, one class per file.
+- A class gets what it needs through its constructor (dependency injection). There is no global state, so every class can be tested on its own.
+- Modules communicate through interfaces and events, never through each other's internals.
+- Parts that can be swapped out are abstract base classes: the speech-to-text engine (D2), instruments, game modes.
+- Settings (thresholds, command words, pins, rates) live in one config place per side, not scattered through the code.
+- Unit tests: firmware in `firmware/test/` (`pio test`), Linux side in `app/tests/` (pytest).
+
+### Firmware (MCU, C++, PlatformIO)
+
+Every hardware part derives from `Module`. Parts that deliver input also implement `InputSource` and write their values into the shared `InputFrame`. `Firmware` holds the list of modules and updates them on every loop. `BridgeLink` sends the frame to Linux and passes commands from Linux on to the output modules. Each module is its own PlatformIO library in `firmware/lib/<Name>/`.
+
+```mermaid
+classDiagram
+  direction TB
+  class Module {
+    <<interface>>
+    +begin() void
+    +update(uint32_t nowMs) void
+  }
+  class InputSource {
+    <<interface>>
+    +fill(InputFrame frame) void
+  }
+  class Firmware {
+    -List~Module~ modules
+    +add(Module module) void
+    +begin() void
+    +update() void
+  }
+  class InputFrame {
+    <<struct>>
+    +float tiltX
+    +float tiltY
+    +int16 knob
+    +uint8 buttons
+    +uint16 distanceMm
+  }
+  class TiltSensor {
+    -LowPassFilter filterX
+    -LowPassFilter filterY
+  }
+  class ButtonPanel {
+    +setLeds(uint8 mask) void
+  }
+  class Alarm {
+    +trigger(uint16 durationMs) void
+  }
+  class StatusLed {
+    +show(VoiceState state) void
+  }
+  class BridgeLink {
+    -List~InputSource~ sources
+    -uint16 frameRateHz
+    +sendFrame() void
+  }
+  Module <|-- InputSource
+  InputSource <|.. TiltSensor
+  InputSource <|.. KnobInput
+  InputSource <|.. ButtonPanel
+  InputSource <|.. DistanceSensor
+  Module <|.. Alarm
+  Module <|.. StatusLed
+  Module <|.. BridgeLink
+  Firmware o-- Module : updates
+  TiltSensor *-- LowPassFilter
+  BridgeLink o-- InputSource : reads
+  BridgeLink ..> InputFrame : sends
+  BridgeLink --> Alarm : alarm
+  BridgeLink --> ButtonPanel : leds
+  BridgeLink --> StatusLed : voice_state
+```
+
+### Linux app (Python)
+
+Every feature derives from `Service` and is registered with `App`. Services never call each other directly; they publish and subscribe to events on the `EventBus`. For example:
+- `McuLink` publishes an `InputFrame` event for every frame from the MCU.
+- `McuLink` turns `GameEvent(hit)` into `alarm()`, and `VoiceStateChanged` into `voice_state()`.
+- `PowerManager` sends everything to idle after 60 s without input.
+
+```mermaid
+classDiagram
+  direction TB
+  class App {
+    -EventBus bus
+    -List~Service~ services
+    +register(Service service)
+    +run()
+  }
+  class EventBus {
+    +subscribe(event_type, handler)
+    +publish(event)
+  }
+  class Service {
+    <<abstract>>
+    #EventBus bus
+    +start()
+    +stop()
+  }
+  class McuLink {
+    +alarm(duration_ms)
+    +set_leds(mask)
+    +set_voice_state(state)
+  }
+  class VoiceService {
+    -AudioInput audio
+    -SignalProcessor dsp
+    -VoiceActivityDetector vad
+    -SpeechRecognizer recognizer
+    -CommandMatcher matcher
+  }
+  class SpeechRecognizer {
+    <<abstract>>
+    +transcribe(segment) Transcript
+  }
+  class CommandMatcher {
+    +match(transcript) CommandEvent
+  }
+  class SoundService {
+    -ClipLibrary clips
+    -PhraseBuilder phrases
+    +play(line_id)
+  }
+  class PowerManager {
+    -float idle_timeout_s
+  }
+  class MetricsLogger {
+    +log_latency(ms)
+    +log_cpu_and_ram(state)
+  }
+  App o-- Service
+  App *-- EventBus
+  Service --> EventBus : publish / subscribe
+  Service <|-- McuLink
+  Service <|-- VoiceService
+  Service <|-- GameEngine
+  Service <|-- SoundService
+  Service <|-- Renderer
+  Service <|-- PowerManager
+  Service <|-- MetricsLogger
+  VoiceService *-- AudioInput
+  VoiceService *-- SignalProcessor
+  VoiceService *-- VoiceActivityDetector
+  VoiceService o-- SpeechRecognizer
+  VoiceService *-- CommandMatcher
+  SpeechRecognizer <|-- WhistleRecognizer
+  SpeechRecognizer <|-- VoskRecognizer
+  SoundService *-- ClipLibrary
+  SoundService *-- PhraseBuilder
+```
+
+The game in detail:
+
+```mermaid
+classDiagram
+  direction TB
+  class GameEngine {
+    -GameState state
+    -GameMode mode
+    -Level level
+    -Patient patient
+    -TrainingMetrics metrics
+    -Instrument active_tool
+    +on_input(InputFrame frame)
+    +on_command(CommandEvent command)
+  }
+  class GameState {
+    <<enumeration>>
+    IDLE
+    MENU
+    PLAYING
+    PAUSED
+    RESULT
+  }
+  class GameMode {
+    <<abstract>>
+    +on_command(command, engine)
+  }
+  class CoopMode {
+    -pending_call
+  }
+  class Instrument {
+    <<abstract>>
+    +name
+    +can_handle(target) bool
+    +apply(target, engine)
+  }
+  class Level {
+    -CollisionMap mask
+    -List~Target~ targets
+    +load(path) Level$
+  }
+  class CollisionMap {
+    +is_wall(x, y) bool
+  }
+  class Patient {
+    -heart_rate
+    +on_contact()
+  }
+  class TrainingMetrics {
+    +time_s
+    +contacts
+    +steadiness
+    +calls_correct
+    +calls_wrong
+    +result() RoundResult
+  }
+  class Renderer {
+    -Hud hud
+    -ResultScreen result_screen
+  }
+  GameEngine *-- GameState
+  GameEngine *-- GameMode
+  GameEngine *-- Level
+  GameEngine *-- Patient
+  GameEngine *-- TrainingMetrics
+  GameEngine o-- Instrument : active tool
+  GameMode <|-- SoloMode
+  GameMode <|-- CoopMode
+  Instrument <|-- Forceps
+  Instrument <|-- Swab
+  Instrument <|-- Clamp
+  Instrument <|-- Scalpel
+  Level *-- CollisionMap
+  Level *-- Target
+  Renderer *-- Hud
+  Renderer *-- ResultScreen
+```
+
+The events on the bus are the interface tables above, written as classes: `InputFrame`, `CommandEvent`, `VoiceStateChanged`, `ListenRequest`, `GameEvent`, `RoundResult`.
+
+### Adding a feature
+
+| You want to add | Do this |
+| --- | --- |
+| A sensor | Firmware: a class in `firmware/lib/<Name>/` deriving from `InputSource`; a new field in `InputFrame`; one line in `main.cpp`. Linux: read the field from the `InputFrame` event. |
+| An output (LED, motor) | Firmware: a class deriving from `Module`, plus a new Bridge command in `BridgeLink`. Linux: a matching method in `McuLink`. |
+| An instrument | A subclass of `Instrument` in `app/trainer/game/instruments/`; its command word in the config; a reference to it in the level JSON |
+| A game mode | A subclass of `GameMode` |
+| Another speech-to-text engine | A subclass of `SpeechRecognizer`, selected in the config |
+| Any other feature on Linux (for example extra sound effects) | A new `Service` that subscribes to existing events, registered in `App` |
 
 ## Speech pipeline
 
@@ -277,7 +518,7 @@ Event end: 14 November, 12:00. The exact build cutoff is not published; ask the 
 
 | Milestone | Target | Done when |
 | --- | --- | --- |
-| **M0 Risk tests** | 13 Nov, about 15:00 | Each person has proven their riskiest part on the real board: a spoken command from the headset produces a spoken reply on the board (the README's first milestone), with latency measured; tilt values arrive on Linux; a window appears full-screen on the Elecrow; the horn and LED switch. D1 and D2 decided. |
+| **M0 Risk tests** | 13 Nov, about 15:00 | Each person has proven their riskiest part on the real board: a spoken command from the headset produces a spoken reply on the board (the README's first milestone), with latency measured; tilt values arrive on Linux; a window appears full-screen on the Elecrow; the horn and LED switch. D2 decided. |
 | **M1 First playable** | 13 Nov, about 20:00 | One-player mode works for one level: tilt steers, a wall touch sounds the horn and lights the LED, and one voice command changes the tool |
 | **M2 Feature complete** | 14 Nov, about 03:00 | All commands including `cancel`; voice states visible on screen and LED; "Pardon?" for misheard speech; patient lines; three levels; co-op; idle mode |
 | **M3 Demo ready** | 14 Nov, about 09:00 | Every row in the [criteria check](#hackathon-criteria-check) verified on the board; 10 demo runs in a row without a restart; measured values in the README; demo script rehearsed in under 2 minutes; build published (D6). After that, only bug fixes. |
@@ -299,7 +540,7 @@ Event end: 14 November, 12:00. The exact build cutoff is not published; ask the 
 | Risk | Fallback |
 | --- | --- |
 | Speech recognition unreliable in hall noise | Headset mic close to the mouth; restricted vocabulary (Vosk); every command visible on screen; button fallback for tools |
-| Bridge or Modulino library does not work with PlatformIO (Option B) | Switch to Option A |
+| Bridge or Modulino library does not work with PlatformIO | Test both in M0. Modulino: read the sensors over `Wire1` directly. Bridge: send the frames as text lines over the Serial monitor channel (port 7500 on the board). |
 | Python rendering too slow on the board | Lower resolution or fps; redraw only the parts that change |
 | Hub cannot power the display and headset | Separate 5 V USB charger for the display |
 | Horn needs more than 5 V or too much current | Driver with a MOSFET, or replace it with a 5 V buzzer (see [WIRING.md](WIRING.md#horn)) |
@@ -369,14 +610,28 @@ Sources: the event constraints and our proposed team requirements from the hacka
 - Can we borrow a USB-C power meter? A multimeter alone cannot easily measure the whole setup (see [WIRING.md](WIRING.md#energy-measurement-with-the-peaktech)).
 - Is training in the cloud (for example Edge Impulse) allowed during development, given that no voice data may leave the device during use?
 
-## Planned repo layout
+## Repo layout
+
+This structure is in the repo; every folder has a README or a package docstring describing what belongs there.
 
 ```
-firmware/   MCU sketch (PlatformIO, exists) or sketch/ for App Lab (D1)
-game/       Game loop, rendering, modes (Python, Linux side)
-voice/      VAD, speech-to-text, command matching, sound player
-levels/     Level masks (PNG) + JSON
-docs/       Measured values, demo script, pitch
+firmware/                 MCU sketch (C++, PlatformIO)
+  src/main.cpp            creates the modules and runs them
+  lib/<Module>/           one library per module: Core, TiltSensor, Alarm, BridgeLink, ...
+  test/                   unit tests (pio test)
+  tools/board.sh          build and flash on the board over adb
+app/                      Linux side (Python)
+  trainer/core/           App, Service, EventBus, events, config
+  trainer/hardware/       McuLink (Bridge client)
+  trainer/voice/          AudioInput, SignalProcessor, VAD, recognisers, CommandMatcher, VoiceService
+  trainer/audio/          ClipLibrary, PhraseBuilder, SoundService, TtsRenderer (setup only)
+  trainer/game/           GameEngine, GameState, modes, Level, Patient, TrainingMetrics
+  trainer/game/instruments/  Instrument and its subclasses
+  trainer/ui/             Renderer, Hud, ResultScreen
+  trainer/system/         PowerManager, MetricsLogger
+  tests/                  unit tests (pytest)
+levels/                   level masks (PNG) + JSON
+docs/                     measured values, demo script, pitch
 ```
 
 ## References

@@ -55,6 +55,45 @@ flowchart LR
 
 Logic level is **3.3 V**. Do not connect any 5 V signal to an input. All sensors go through Qwiic at 3.3 V, so this only matters for extra wiring.
 
+## Wiring diagram (pins)
+
+Every wire on the UNO Q headers and the Qwiic connector. The circuits are explained under [Red LED](#red-led) and [Horn](#horn).
+
+```mermaid
+flowchart LR
+  subgraph UNOQ["Arduino UNO Q"]
+    QW["Qwiic<br/>Wire1, 3.3 V"]
+    D6["D6 (PWM)"]
+    D9["D9 (PWM)"]
+    V5["5V"]
+    GND["GND"]
+  end
+  subgraph LEDC["Red LED circuit"]
+    R1["330 Ω"]
+    LED["Red LED<br/>anode → cathode"]
+  end
+  subgraph HORNC["Horn driver"]
+    R2["1 kΩ"]
+    Q1["NPN transistor<br/>2N2222 / BC337"]
+    HORN["Horn"]
+    DIO["Diode 1N4148<br/>across the horn, coil horns only<br/>cathode to 5V"]
+  end
+  subgraph CHAIN["Modulino chain"]
+    MB["Buttons"]
+    MK["Knob"]
+    MD["Distance<br/>(optional)"]
+    MM["Movement<br/>in the instrument"]
+  end
+  D6 --> R1 --> LED -- "cathode" --> GND
+  D9 --> R2 -- "base" --> Q1
+  V5 -- "+" --> HORN
+  HORN -- "− to collector" --> Q1
+  Q1 -- "emitter" --> GND
+  DIO -.- HORN
+  QW --> MB --> MK --> MD
+  MD == "long Qwiic cable" ==> MM
+```
+
 ## Modulino chain (Qwiic)
 
 ```
