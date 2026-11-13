@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Mirror app/ and levels/ to the board over adb (like firmware/tools/board.sh).
-# Keeps the board's .venv, models and logs. The git repo on your computer stays
+# Keeps the board's .venv, models, logs and rendered clips (assets/clips). The git repo on your computer stays
 # the source of truth. Set BOARD_SSH=arduino@<ip> to go over Wi-Fi instead of USB.
 #   app/tools/sync_to_board.sh            copy
 #   app/tools/sync_to_board.sh shell      copy, then open a shell in ~/promptpimps-unoq/app
@@ -19,9 +19,9 @@ else
   remote()     { "$ADB" shell "$@"; }
   remote_tty() { "$ADB" shell -t "$@"; }
 fi
-remote "mkdir -p ~/$REMOTE/app ~/$REMOTE/levels && cd ~/$REMOTE/app && find . -mindepth 1 -maxdepth 1 ! -name .venv ! -name models ! -name logs -exec rm -rf {} + && rm -rf ~/$REMOTE/levels/*"
+remote "mkdir -p ~/$REMOTE/app ~/$REMOTE/levels && cd ~/$REMOTE/app && find . -mindepth 1 -maxdepth 1 ! -name .venv ! -name models ! -name logs ! -name assets -exec rm -rf {} + && rm -rf ~/$REMOTE/levels/*"
 COPYFILE_DISABLE=1 tar -C "$REPO_DIR" --no-xattrs \
-    --exclude=app/.venv --exclude=app/models --exclude=app/logs --exclude='__pycache__' \
+    --exclude=app/.venv --exclude=app/models --exclude=app/logs --exclude='app/assets/clips/*.wav' --exclude='__pycache__' \
     --exclude=.pytest_cache --exclude=.DS_Store -cf - app levels \
   | remote "tar -C ~/$REMOTE -xf -"
 echo "synced app/ and levels/ to the board (~/$REMOTE)"
