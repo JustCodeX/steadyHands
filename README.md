@@ -35,10 +35,18 @@ flowchart LR
   K -- "Qwiic" --> DI["Modulino Distance (optional)"]
   DI -- "long Qwiic cable" --> M["Modulino Movement<br/>in the instrument"]
   Q -- "D6 via 330 Ω" --> LED["Red LED"]
-  Q -- "D10 via NPN driver" --> HORN["Horn"]
+  Q -- "D10 via MOSFET driver (IRF520N)" --> HORN["Horn"]
 ```
 
 Pin-level diagram, circuits, power, and measurement: [WIRING.md](WIRING.md).
+
+### Horn on the breadboard (BB400)
+
+Breadboard map for the horn, MOSFET, buzzer, diode, red LED, and resistors: every lead, its hole, and the part list. Letters run across the top, numbers down the side, rails on the left and right.
+
+[Breadboard wiring map](https://claude.ai/artifact/FrkYQgyuYQ1SXPaMTXXSPg) (private artifact: opens only for people it is shared with)
+
+Use 100 Ω for the gate, 100 kΩ pulldown, and 220 Ω (or 330 Ω) for the LED. The IRF520N is not logic-level; an IRL520N is the better part if you can get one.
 
 ## Code structure (UML)
 
