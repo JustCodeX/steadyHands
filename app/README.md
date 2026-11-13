@@ -31,7 +31,7 @@ cd ~/promptpimps-unoq/app
 setup/board_setup.sh       # apt packages (sudo), autologin for :0, venv, models, levels, clips
 ```
 
-The setup needs the board password once (for `apt` and the autologin file). It downloads the Vosk small English model (40 MB) and the Piper voice (60 MB) into `app/models/` (git-ignored) and renders every patient line to `assets/clips/` once. Nothing is downloaded or synthesised during play.
+The setup needs the board password once (for `apt`, the autologin file, and the USB host-mode service). The board's USB-C port falls back to device mode, which disconnects the hub's USB devices (headset, touch); USB adb does the same, so adbd is disabled and a small root service keeps the port in host mode. Use SSH (`BOARD_SSH`) instead of USB adb on a board set up this way. It downloads the Vosk small English model (40 MB) and the Piper voice (60 MB) into `app/models/` (git-ignored) and renders every patient line to `assets/clips/` once. Nothing is downloaded or synthesised during play.
 
 ## Running
 

@@ -11,6 +11,14 @@ echo "== 1/5 system packages (sudo)"
 sudo apt-get install -y --no-install-recommends \
   python3-venv python3-pygame python3-numpy libportaudio2 espeak-ng xset unzip
 
+echo "== 1b/5 USB host mode for the hub (sudo)"
+# USB adb puts the port into device mode and kicks the hub off; we use SSH instead.
+sudo systemctl disable --now adbd 2>/dev/null || true
+sudo install -m 755 setup/usb-host-mode.sh /usr/local/bin/steadyhands-usb-host.sh
+sudo install -m 644 setup/steadyhands-usb-host.service /etc/systemd/system/steadyhands-usb-host.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now steadyhands-usb-host.service
+
 echo "== 2/5 autologin so the game can use the HDMI display (:0)"
 if ! grep -qs "autologin-user=arduino" /etc/lightdm/lightdm.conf.d/*.conf 2>/dev/null; then
   sudo mkdir -p /etc/lightdm/lightdm.conf.d
