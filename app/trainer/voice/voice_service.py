@@ -223,6 +223,7 @@ class VoiceService(Service):
                     self.answer_segmenter.reset()
                     if now_open is not None:
                         self.answer_recognizer.set_vocabulary(now_open.keywords())
+                        self.evaluator.prepare(now_open)
                 question = now_open
             segmenter = self.answer_segmenter if question is not None else self.segmenter
             recognizer = self.answer_recognizer if question is not None else self.recognizer
@@ -330,9 +331,15 @@ def build_interpreter(cfg: VoiceConfig, commands: dict[str, list[str]]) -> Comma
     if cfg.interpreter == "keyword":
         return CommandMatcher(commands)
     if cfg.interpreter == "needle":
-        # Not built yet: docs/needle-integration.md says where it goes.
-        log.warning("voice.interpreter = needle is not available yet; using the keyword matcher")
-        return CommandMatcher(commands)
+        try:
+            from ..cactus_models.needle_interpreter import NeedleInterpreter
+
+            if cfg.command_vocabulary != "open" and cfg.recognizer == "vosk":
+                log.warning("voice.interpreter = needle only sees the command phrases unless command_vocabulary = open")
+            return NeedleInterpreter(commands, cfg.needle_weights, min_confidence=cfg.needle_min_confidence)
+        except Exception as exc:
+            log.error("Needle unavailable (%s); using the keyword matcher", exc)
+            return CommandMatcher(commands)
     raise ValueError(f"unknown interpreter: {cfg.interpreter}")
 
 
@@ -341,31 +348,56 @@ def build_evaluator(cfg: VoiceConfig) -> AnswerEvaluator:
     if cfg.evaluator == "keyword":
         return KeywordEvaluator()
     if cfg.evaluator == "needle":
-        # Not built yet: docs/needle-integration.md says where it goes.
-        log.warning("voice.evaluator = needle is not available yet; using the keyword evaluator")
-        return KeywordEvaluator()
+        try:
+            from ..cactus_models.needle_evaluator import NeedleEvaluator
+
+            return NeedleEvaluator(cfg.needle_weights, cfg.needle_min_confidence)
+        except Exception as exc:
+            log.error("Needle unavailable (%s); using the keyword evaluator", exc)
+            return KeywordEvaluator()
     raise ValueError(f"unknown evaluator: {cfg.evaluator}")
 
 
+def _whistle(cfg: VoiceConfig, keywords: list[str]) -> SpeechRecognizer:
+    from ..cactus_models.whistle_recognizer import WhistleRecognizer
+
+    return WhistleRecognizer(cfg.whistle_weights, cfg.whistle_language, keywords, cfg.sample_rate)
+
+
 def build_answer_recognizer(cfg: VoiceConfig, questions: QuestionBank) -> SpeechRecognizer:
-    """The recogniser for spoken quiz answers. It shares the model with the
-    command recogniser, so it adds no second model to memory."""
+    """The recogniser for spoken quiz answers. The Vosk members share the
+    model with the command recogniser, so they add no second model to memory.
+    A member that cannot be built is left out with a log line."""
     if cfg.answer_vocabulary not in ("both", "open", "keywords"):
         raise ValueError(f"unknown answer_vocabulary: {cfg.answer_vocabulary}")
-    if cfg.recognizer == "vosk" and len(questions):
-        try:
-            from .vosk_recognizer import VoskRecognizer
+    if cfg.answer_engine not in ("vosk", "whistle"):
+        raise ValueError(f"unknown answer_engine: {cfg.answer_engine}")
+    if cfg.recognizer == "null" or not len(questions):
+        return NullRecognizer()
 
-            members = []
-            if cfg.answer_vocabulary in ("both", "open"):
-                members.append(VoskRecognizer(cfg.model_dir, None, cfg.sample_rate))
-            if cfg.answer_vocabulary in ("both", "keywords"):
-                # narrowed to the open question's options when it is asked
-                members.append(VoskRecognizer(cfg.model_dir, questions.keywords(), cfg.sample_rate))
-            return members[0] if len(members) == 1 else EnsembleRecognizer(members)
+    def vosk(phrases: list[str] | None) -> SpeechRecognizer:
+        from .vosk_recognizer import VoskRecognizer
+
+        return VoskRecognizer(cfg.model_dir, phrases, cfg.sample_rate)
+
+    wanted = []
+    if cfg.answer_vocabulary in ("both", "open"):
+        if cfg.answer_engine == "whistle":
+            wanted.append(("Whistle", lambda: _whistle(cfg, questions.keywords())))
+        else:
+            wanted.append(("Vosk (open vocabulary)", lambda: vosk(None)))
+    if cfg.answer_vocabulary in ("both", "keywords"):
+        # narrowed to the open question's options when it is asked
+        wanted.append(("Vosk (answer phrases)", lambda: vosk(questions.keywords())))
+    members = []
+    for name, build in wanted:
+        try:
+            members.append(build())
         except Exception as exc:
-            log.error("Vosk unavailable (%s); spoken answers disabled", exc)
-    return NullRecognizer()
+            log.error("%s unavailable for spoken answers (%s)", name, exc)
+    if not members:
+        return NullRecognizer()
+    return members[0] if len(members) == 1 else EnsembleRecognizer(members)
 
 
 def build_recognizer(cfg: VoiceConfig, phrases: list[str]) -> SpeechRecognizer:
@@ -382,6 +414,12 @@ def build_recognizer(cfg: VoiceConfig, phrases: list[str]) -> SpeechRecognizer:
             return VoskRecognizer(cfg.model_dir, vocabulary, cfg.sample_rate)
         except Exception as exc:
             log.error("Vosk unavailable (%s); voice commands disabled, keyboard still works", exc)
+            return NullRecognizer()
+    if cfg.recognizer == "whistle":
+        try:
+            return _whistle(cfg, phrases)
+        except Exception as exc:
+            log.error("Whistle unavailable (%s); voice commands disabled, keyboard still works", exc)
             return NullRecognizer()
     if cfg.recognizer == "null":
         return NullRecognizer()

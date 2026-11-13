@@ -11,6 +11,7 @@ Every feature is a class derived from `Service`. Services are registered with `A
 | `trainer/core/` | `App`, `Service`, `EventBus`, the event dataclasses, `config.py` (every setting, TOML overrides) |
 | `trainer/hardware/` | `McuLink` (Bridge client), `KeyboardInput` (dev mode and demo fallback) |
 | `trainer/voice/` | `AudioInput`, `SignalProcessor` (high-pass, level normalisation), `EnergyVad` + `Segmenter`, `SpeechRecognizer` → `VoskRecognizer` / `EnsembleRecognizer` / `NullRecognizer`, `CommandInterpreter` → `CommandMatcher`, `VoiceService` |
+| `trainer/cactus_models/` | Optional, needs `cactus-compute`: `NeedleAgent`, `NeedleEvaluator`, `NeedleInterpreter`, `WhistleRecognizer` (switched on with `cactus.toml`, see [docs/needle-integration.md](../docs/needle-integration.md)) |
 | `trainer/quiz/` | `Question` + `QuestionBank` (`assets/questions.json`), `AnswerEvaluator` → `KeywordEvaluator` |
 | `trainer/audio/` | `lines.py` (every spoken line), `ClipLibrary`, `PhraseBuilder`, `SoundService`, `TtsRenderer` (setup only) |
 | `trainer/game/` | `GameEngine`, `GameState`, `SoloMode` / `CoopMode`, `Level` + `LevelCatalog`, `CollisionMap`, `Patient`, `TrainingMetrics`, `QuizDirector` (when to ask, answer window), `Stress`, `ActionCatalog` (the commands as tool schemas) |
@@ -18,7 +19,7 @@ Every feature is a class derived from `Service`. Services are registered with `A
 | `trainer/ui/` | `Renderer` (picks the screen), `MenuScreen`, `RoundView`, `Hud`, `PauseOverlay`, `ResultScreen`, `MapPainter` (level mask → wound picture), `Fonts`, `theme.py` |
 | `trainer/ui/art/` | Artwork drawn with code and cached: `InstrumentArt`, `TargetArt`, `PatientArt`, `Glyphs`, `Backdrop`, `canvas.py` (drawing helpers) |
 | `trainer/system/` | `PowerManager` (idle mode), `MetricsLogger` (latency, CPU, RAM per state → `logs/metrics.csv`) |
-| `tools/` | `make_levels.py`, `render_clips.py`, `bridge_probe.py`, `sync_to_board.sh` |
+| `tools/` | `make_levels.py`, `render_clips.py`, `bridge_probe.py`, `sync_to_board.sh`, `needle_eval.py` (checks a Needle rung on the board) |
 | `setup/` | `board_setup.sh`, `download_models.sh` |
 | `tests/` | pytest suite, runs headless on any computer |
 

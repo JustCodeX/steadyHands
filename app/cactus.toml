@@ -1,0 +1,19 @@
+# Switches on the Cactus models (Needle, Whistle). Needs `pip install -r
+# requirements-cactus.txt` and the model files in app/models/ (see
+# docs/needle-integration.md). Without them the app logs one line per missing
+# piece and runs as before.
+#   python -m trainer --config cactus.toml
+
+[voice]
+# Needle judges quiz answers that name none of the options in so many words
+# ("the thing you cut with"). Answers that do name one never reach the model.
+evaluator = "needle"
+
+# Whistle instead of Vosk as the recogniser that hears whole sentences for
+# answers. Measure it against "vosk" first (docs/tests.md): same 20 answers.
+# answer_engine = "whistle"
+
+# Commands in free speech ("something to stop the bleeding"). Costs the
+# robustness of the restricted command vocabulary: try it in hall noise first.
+# interpreter = "needle"
+# command_vocabulary = "open"

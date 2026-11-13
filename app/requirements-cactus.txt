@@ -1,0 +1,3 @@
+# Optional: the Needle tool-calling model and the Whistle speech-to-text model
+# (trainer/cactus_models, switched on with cactus.toml). Not needed otherwise.
+cactus-compute>=4.2.0

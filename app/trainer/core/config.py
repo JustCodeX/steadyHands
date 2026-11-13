@@ -65,9 +65,12 @@ class GameConfig:
 @dataclass
 class VoiceConfig:
     enabled: bool = True
-    recognizer: str = "vosk"  # "vosk" | "null"
-    # Transcript -> command word. "keyword" is the phrase matcher; "needle" is
-    # reserved for the tool-calling model (docs/needle-integration.md).
+    # "vosk" | "whistle" | "null". Whistle has no restricted vocabulary, so
+    # for commands it only makes sense together with interpreter = "needle".
+    recognizer: str = "vosk"
+    # Transcript -> command word. "keyword" is the phrase matcher. "needle"
+    # adds the tool-calling model for speech without a command phrase; it
+    # needs command_vocabulary = "open" (docs/needle-integration.md).
     interpreter: str = "keyword"
     # "restricted": the recogniser only knows the command phrases (robust).
     # "open": free speech, which an interpreter like Needle needs to be useful.
@@ -92,8 +95,11 @@ class VoiceConfig:
     confidence_threshold: float = 0.6
     # --- spoken quiz answers (whole sentences) ---
     # Spoken answer -> one of the question's options. "keyword" looks for the
-    # options' phrases; "needle" is reserved (docs/needle-integration.md).
+    # options' phrases. "needle" adds the tool-calling model for answers that
+    # name none of them ("the thing you cut with").
     evaluator: str = "keyword"
+    # Which engine hears whole sentences for answers: "vosk" | "whistle".
+    answer_engine: str = "vosk"
     # "open": free speech; follows sentences but mishears rare words.
     # "keywords": only the open question's answer phrases; knows the words
     # but loses them inside a sentence. "both": the two hear the same audio.
@@ -102,6 +108,11 @@ class VoiceConfig:
     answer_hangover_ms: int = 700  # people pause in the middle of a sentence
     answer_confidence_threshold: float = 0.5
     debug_asr: bool = False  # on-screen side panel with everything the recogniser hears
+    # --- Cactus models (optional; see app/cactus.toml) ---
+    needle_weights: str = str(APP_DIR / "models" / "needle3-9L.cact")
+    needle_min_confidence: float = 0.1  # the runtime itself holds back calls below 0.1
+    whistle_weights: str = str(APP_DIR / "models" / "whistle.cact")
+    whistle_language: str = "en"  # pinned: auto-detection confuses languages on short segments
 
 
 @dataclass

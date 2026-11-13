@@ -65,6 +65,12 @@ class ActionCatalog:
     def __init__(self, actions: Sequence[GameAction] = DEFAULT_ACTIONS) -> None:
         self._actions = {a.name: a for a in actions}
 
+    def actions(self) -> list[GameAction]:
+        return list(self._actions.values())
+
+    def get(self, name: str) -> GameAction | None:
+        return self._actions.get(name)
+
     def schemas(self, allowed: Sequence[str] | None = None) -> list[dict]:
         """Tool schemas for the model. `allowed` (command words, e.g. from
         `GameEngine.available_commands()`) drops every action and every

@@ -15,7 +15,7 @@ from trainer.core.events import (
     VoiceState,
     VoiceStateChanged,
 )
-from trainer.quiz import Question, QuestionBank
+from trainer.quiz import KeywordEvaluator, Question, QuestionBank
 from trainer.voice.audio_input import AudioInput, Decimator, usb_sound_card_present
 from trainer.voice.recognizer import EnsembleRecognizer, SpeechRecognizer, Transcript
 from trainer.voice.signal_processor import SignalProcessor
@@ -470,6 +470,9 @@ def run_voice_thread(question_open):
 
     bus = EventBus()
     commands, answers = ScriptedRecognizer("clamp"), ScriptedRecognizer("i would take the clamp")
+    evaluator = KeywordEvaluator()
+    answers.prepared = []
+    evaluator.prepare = answers.prepared.append  # the hook a model uses to get ready for the question
     svc = VoiceService(
         bus,
         VoiceConfig(),
@@ -478,6 +481,7 @@ def run_voice_thread(question_open):
         audio=ScriptedAudio(speech_then_silence()),
         questions=QUIZ,
         answer_recognizer=answers,
+        evaluator=evaluator,
     )
     seen = []
     bus.subscribe(AnswerEvent, seen.append)
@@ -501,6 +505,7 @@ def test_voice_thread_sends_speech_to_the_answer_recogniser_while_a_question_is_
     seen, commands, answers = run_voice_thread(question_open=True)
     assert len(seen) == 1 and isinstance(seen[0], AnswerEvent) and seen[0].correct
     assert answers.vocabulary == ["clamp", "swab", "sponge"]  # narrowed to this question's options
+    assert [q.id for q in answers.prepared] == ["bleed"]  # the evaluator was told about the question once
     assert answers.audio and not commands.audio
 
 

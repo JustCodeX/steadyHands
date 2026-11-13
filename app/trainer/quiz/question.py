@@ -20,7 +20,9 @@ class Question:
             raise ValueError(f"question {self.id}: correct option {self.correct!r} is not among the options")
 
     def keywords(self) -> list[str]:
-        return [phrase for phrases in self.options.values() for phrase in phrases]
+        """The answer phrases a restricted recogniser can be given: words only.
+        Phrases in digits ("37") are for engines that write numbers that way."""
+        return [phrase for phrases in self.options.values() for phrase in phrases if phrase.replace(" ", "").isalpha()]
 
 
 @dataclass

@@ -35,7 +35,8 @@ With `voice.answer_vocabulary = "both"` (the default). Run with `--config debug-
 
 | Setting | Tries | Right verdict | Wrong verdict | Unclear ("Pardon?") | Not heard |
 | --- | --- | --- | --- | --- | --- |
-| both | | | | | |
+| both, Vosk | | | | | |
+| both, Whistle (`answer_engine = "whistle"`) | | | | | |
 | open | | | | | |
 | keywords | | | | | |
 
@@ -57,3 +58,18 @@ With `voice.answer_vocabulary = "both"` (the default). Run with `--config debug-
 | assistant presses C on another instrument | "That is the wrong instrument."; counted as a wrong call; the call stays open | |
 | assistant presses C without a call | nothing changes; "No instrument was called" on screen | |
 | assistant waits longer than 8 s | the call runs out; nothing changes | |
+
+## Needle on the board (`app/tools/needle_eval.py`)
+
+| Rung | Passed | Median (ms) | Worst (ms) | Memory added (MB) | Failed cases |
+| --- | --- | --- | --- | --- | --- |
+| 9L | | | | | |
+| 12L | | | | | |
+| 19L | | | | | |
+
+| Case, with `--config cactus.toml` | Expected reaction | Observed |
+| --- | --- | --- |
+| answer that names the option ("the clamp") | verdict at once; the model is not asked | |
+| answer in other words ("the thing you cut with") | right verdict after about a second | |
+| answer that fits no option ("I have no idea") | "Pardon?" | |
+| `cactus-compute` not installed, or a model file missing | one log line; the game runs with the keyword evaluator | |

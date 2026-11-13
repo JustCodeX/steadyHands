@@ -22,4 +22,16 @@ if [[ ! -f "$MODELS/piper/$VOICE.onnx" ]]; then
   curl -L --fail -o "$MODELS/piper/$VOICE.onnx" "$BASE/$VOICE.onnx"
   curl -L --fail -o "$MODELS/piper/$VOICE.onnx.json" "$BASE/$VOICE.onnx.json"
 fi
+# Optional: the Cactus models (app/cactus.toml). WITH_CACTUS=1 setup/download_models.sh
+if [[ "${WITH_CACTUS:-0}" == "1" ]]; then
+  if [[ ! -f "$MODELS/whistle.cact" ]]; then
+    echo "Downloading Whistle (about 17 MB)"
+    curl -L --fail -o "$MODELS/whistle.cact" "https://huggingface.co/Cactus-Compute/whistle/resolve/main/whistle.cact"
+  fi
+  if [[ ! -f "$MODELS/needle3-9L.cact" ]]; then
+    # A rung is built from the checkpoint with the training extras, on a
+    # laptop: cactus build needle3.safetensors --layers 9 --out needle3-9L.cact
+    echo "needle3-9L.cact is not downloadable: build it (docs/needle-integration.md) and copy it to $MODELS/"
+  fi
+fi
 echo "models ready in $MODELS"

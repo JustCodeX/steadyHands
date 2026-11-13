@@ -409,7 +409,7 @@ The events on the bus are the interface tables above, written as classes: `Input
 | A sensor | Firmware: a class in `firmware/lib/<Name>/` deriving from `InputSource`; a new field in `InputFrame`; one line in `main.cpp`. Linux: read the field from the `InputFrame` event. |
 | An output (LED, motor) | Firmware: a class deriving from `Module`, plus a new Bridge command in `BridgeLink`. Linux: a matching method in `McuLink`. |
 | A quiz question | An entry in `app/assets/questions.json`, then `python tools/render_clips.py` on the board |
-| Another way to judge a spoken quiz answer | A subclass of `AnswerEvaluator`, selected in the config |
+| Another way to judge a spoken quiz answer | A subclass of `AnswerEvaluator`, selected in the config (`NeedleEvaluator` is one) |
 | An instrument | A subclass of `Instrument` in `app/trainer/game/instruments/`; its command word in the config; a reference to it in the level JSON |
 | A game mode | A subclass of `GameMode` |
 | Another speech-to-text engine | A subclass of `SpeechRecognizer`, selected in the config |
@@ -431,7 +431,7 @@ The events on the bus are the interface tables above, written as classes: `Input
    - During play, the trainer needs no network and exposes no network services. In demo mode, Wi-Fi is switched off where possible, which also saves energy.
    - Training scores are kept for the current session only.
 
-No LLM: the patient's lines are scripted. This saves the most energy and keeps response times short.
+No LLM in the default configuration: the patient's lines are scripted. This saves the most energy and keeps response times short. Two small models from Cactus can be switched on with `app/cactus.toml` ([docs/needle-integration.md](docs/needle-integration.md)): Needle, which can only choose one of our tool calls and judges quiz answers that name no option in so many words, and Whistle as the recogniser for whole sentences. Their runtime's telemetry and hub access are switched off in the code.
 
 ### Speech interaction
 
@@ -461,14 +461,15 @@ The 4 GB RAM is shared by Debian, the desktop, the game, and speech. We measure 
 | Part | Expected memory | Source |
 | --- | --- | --- |
 | Debian + desktop | Measure | |
-| Speech-to-text: Whistle | 16.9 MB model file; memory at runtime unknown, so measure | Model card |
+| Speech-to-text: Whistle (optional) | 17 MB model file; 73 MB at runtime measured on another UNO Q; measure in this app | Team hand-over, 13 Nov |
+| Needle 3, 9-layer rung (optional) | 28 MB model file; 90 MB at runtime measured on another UNO Q; measure in this app | Team hand-over, 13 Nov |
 | Speech-to-text: Vosk small | Around 300 MB | Hackathon README, model catalogue |
 | Piper | Runs only at setup, to pre-render the patient lines; not loaded during play | |
 | VAD | Small; measure | |
 | Vosk recognisers for quiz answers (open vocabulary, and one per question's answer phrases) | Share the loaded model. On a laptop: 1.7 MB for the open one, 0.2 MB per phrase list. Measure on the board | Laptop measurement, 13 Nov |
 | Game (pygame) | Measure | |
 
-Leaving out an LLM saves the most: the README estimates about 1 GB of RAM for a 1B model.
+Leaving out a general LLM saves the most: the README estimates about 1 GB of RAM for a 1B model. Needle is about a tenth of that.
 
 ## Energy and environment
 
@@ -499,7 +500,8 @@ The event encourages publishing the build as open source. Before we publish, we 
 | Component | License | Status |
 | --- | --- | --- |
 | PlatformIO platform `lee-lab-skku/arduinoq` | Apache-2.0 | ✅ from its README |
-| Whistle model | ❓ | Check the model card |
+| Whistle model (optional) | Apache-2.0 | ✅ from its model card |
+| Needle model and the `cactus-compute` runtime (optional) | ❓ | Check the model card and the package |
 | Vosk model (English, small) | ❓ | Check the model catalogue |
 | Piper (engine) and the chosen voice | ❓ | Check the engine repo and the voice's model card separately |
 | Silero VAD | ❓ | Check the repo |
@@ -609,7 +611,7 @@ Sources: the event constraints and our proposed team requirements from the hacka
 | --- | --- | --- | --- | --- |
 | T1 | Feasible for four people in 24 hours, in parallel areas with clear interfaces | [Work split](#work-split) and [interface tables](#interfaces-agree-on-these-first-so-we-can-work-in-parallel) | Interfaces agreed at M0 | ⬜ |
 | T2 | Value and a clear success visible in two minutes | [Demo script](#demo-script-2-minutes) | Rehearsed run under 2:00 | ⬜ |
-| T3 | Minimum version without an unrestricted LLM | No LLM at all; patient lines are scripted | No LLM in the code | 🟡 |
+| T3 | Minimum version without an unrestricted LLM | The default configuration uses no language model; patient lines are scripted. Optional: Needle, which can only choose one of our tool calls | The app runs every feature with `cactus-compute` not installed | 🟡 |
 | T4 | Optional features only after the core works | Core-first rule in the [milestones](#milestones) | Optional work starts only after M1 | ⬜ |
 | T5 | First milestone: spoken input gives a local spoken response on the board; then measure latency | M0 | Test log with latency | ⬜ |
 

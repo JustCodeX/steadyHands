@@ -260,16 +260,20 @@
     "text": "How many chambers does the human heart have?",
     "options": {
       "two": [
-        "two"
+        "two",
+        "2"
       ],
       "three": [
-        "three"
+        "three",
+        "3"
       ],
       "four": [
-        "four"
+        "four",
+        "4"
       ],
       "five": [
-        "five"
+        "five",
+        "5"
       ]
     },
     "correct": "four",
@@ -344,13 +348,16 @@
     "text": "What is a normal body temperature in degrees Celsius: thirty three, thirty seven or forty one?",
     "options": {
       "thirty_three": [
-        "thirty three"
+        "thirty three",
+        "33"
       ],
       "thirty_seven": [
-        "thirty seven"
+        "thirty seven",
+        "37"
       ],
       "forty_one": [
-        "forty one"
+        "forty one",
+        "41"
       ]
     },
     "correct": "thirty_seven",

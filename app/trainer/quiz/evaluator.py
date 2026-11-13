@@ -9,7 +9,7 @@ from __future__ import annotations
 import difflib
 import re
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .question import Question
 
@@ -18,12 +18,16 @@ from .question import Question
 class Verdict:
     choice: str | None  # an option id; None when the answer names no single option
     score: float = 0.0  # 0..1
+    named: tuple[str, ...] = field(default=())  # every option the answer named: none, one, or several
 
 
 class AnswerEvaluator(ABC):
     @abstractmethod
     def evaluate(self, question: Question, text: str) -> Verdict:
         """Decide which option the transcript of a spoken answer means."""
+
+    def prepare(self, question: Question) -> None:  # noqa: B027
+        """Called when the question is asked, before any answer: time to get ready for it."""
 
     def unload(self) -> None:  # noqa: B027
         """Free model memory, if any."""
@@ -44,7 +48,7 @@ class KeywordEvaluator(AnswerEvaluator):
 
     @staticmethod
     def normalise(text: str) -> str:
-        return re.sub(r"[^a-z ]+", " ", text.lower()).strip()
+        return re.sub(r"[^a-z0-9 ]+", " ", text.lower()).strip()  # digits stay: some engines write "37"
 
     def evaluate(self, question: Question, text: str) -> Verdict:
         text = self.normalise(text)
@@ -55,9 +59,9 @@ class KeywordEvaluator(AnswerEvaluator):
         exact = {option: score for option, score in named.items() if score == 1.0}
         named = exact or named
         if len(named) != 1:
-            return Verdict(None)
+            return Verdict(None, named=tuple(named))
         (choice, score), = named.items()
-        return Verdict(choice, score)
+        return Verdict(choice, score, named=(choice,))
 
     def _score(self, phrases: tuple[str, ...], text: str) -> float:
         best = 0.0
