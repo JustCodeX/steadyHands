@@ -256,4 +256,5 @@ class GameSnapshot(Event):
     question_text: str = ""  # the open quiz question, "" if none
     question_left: float = 0.0  # 0..1 of the answer window remaining
     stress: int = 0  # 0..max_stress, raised by wrong answers
+    nurse_selection: str = ""  # co-op: the instrument the assistant has ready
     max_stress: int = 3

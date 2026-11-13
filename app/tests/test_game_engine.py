@@ -10,7 +10,6 @@ from trainer.game.collision_map import CollisionMap
 from trainer.game.engine import GameEngine
 from trainer.game.level import Level, LevelCatalog
 from trainer.game.metrics import TrainingMetrics
-from trainer.game.modes import CoopMode
 
 
 class OpenCatalog(LevelCatalog):
@@ -144,15 +143,6 @@ def test_misheard_twice_gives_help(engine):
     engine.on_misheard(MisheardEvent())
     k = kinds(engine)
     assert k.count("pardon") == 1 and "help" in k
-
-
-def test_coop_needs_callback():
-    mode = CoopMode(window_s=5.0)
-    assert mode.on_tool_call("clamp", 0.0) is False
-    assert mode.pending() == "clamp"
-    assert mode.on_tool_call("clamp", 1.0) is True
-    assert mode.on_tool_call("swab", 2.0) is False
-    assert mode.on_tool_call("swab", 9.0) is False  # too late, starts over
 
 
 def test_metrics_steadiness():

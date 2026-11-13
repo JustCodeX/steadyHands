@@ -96,6 +96,13 @@ class Hud:
                 if word == wanted and int(t * 4) % 2 == 0:  # the tool the target under the instrument needs
                     pygame.draw.rect(surface, theme.WARN, rect, 3, border_radius=10)
                 surface.blit(self._dimmed(word), (rect.x + 3, rect.y + 2))
+            if word == snap.nurse_selection:  # co-op: what the assistant has ready to hand over
+                called = word == snap.pending_call
+                mark = theme.GOOD if called else theme.ACCENT
+                pygame.draw.rect(surface, mark, rect.inflate(6, 6), 3, border_radius=12)
+                pygame.draw.polygon(surface, mark, [(rect.centerx - 7, rect.bottom + 5), (rect.centerx + 7, rect.bottom + 5), (rect.centerx, rect.bottom - 2)])
+            elif word == snap.pending_call and int(t * 4) % 2 == 0:  # co-op: the surgeon called this one
+                pygame.draw.rect(surface, theme.WARN, rect, 3, border_radius=10)
         name_x = self.TRAY_X + len(snap.tools) * (self.SLOT_W + self.SLOT_GAP) + 4
         self.fonts.draw(surface, "label", snap.tool.capitalize(), theme.TARGET_COLOURS.get(snap.tool, theme.TEXT), (name_x, 28), anchor="midleft")
 
@@ -169,7 +176,7 @@ class Hud:
         if voice is not VoiceState.OFF:
             self.mic_icon(surface, self.width - 28, 28, voice, t)
             right = self.width - 54
-            heard = f"call-back: {snap.pending_call}?" if snap.pending_call else snap.last_command
+            heard = f"called: {snap.pending_call}" if snap.pending_call else snap.last_command
             if heard:
                 self.fonts.draw(surface, "small", heard, theme.WARN if heard == "?" else theme.ACCENT, (right, 18), anchor="midright")
             notes = [snap.mode] if snap.mode != "solo" else []

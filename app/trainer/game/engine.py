@@ -111,8 +111,7 @@ class GameEngine(Service):
             self._update_round(dt, now)
         elif self.state is GameState.RESULT and now - self._result_t > self.cfg.result_show_s:
             self.enter_menu()
-        if isinstance(self.mode, CoopMode):
-            self.mode.expire(now)
+        self.mode.expire(now)
         if now > self._message_until:
             self.message = ""
         self.bus.publish(self.snapshot())
@@ -143,7 +142,7 @@ class GameEngine(Service):
         self.x, self.y = float(self.level.start[0]), float(self.level.start[1])
         self.patient.reset()
         self.metrics.start()
-        self.mode.reset()
+        self.mode.reset("forceps")
         self.stress.reset()
         if self.quiz.abandon():  # "new game" while a question was open
             self.bus.publish(QuestionClosed())
@@ -228,13 +227,13 @@ class GameEngine(Service):
                 self.toggle_mode()
         elif self.state is GameState.PLAYING:
             if knob_delta:
-                self._cycle_tool(knob_delta)  # one click of the knob is one tool
+                self._manual_select(knob_delta)  # one click of the knob is one tool
             if pressed & InputFrame.BTN_B:
                 self.pause()
             elif pressed & InputFrame.BTN_A:
                 self._try_grab(manual=True)
             elif pressed & InputFrame.BTN_C:
-                self._cycle_tool()
+                self._handover(time.monotonic())
             elif pressed & InputFrame.BTN_KNOB:
                 self._switch_on_light(time.monotonic())
         elif self.state is GameState.PAUSED:
@@ -249,10 +248,24 @@ class GameEngine(Service):
             if pressed & InputFrame.BTN_A:
                 self.enter_menu()
 
-    def _cycle_tool(self, step: int = 1) -> None:
-        """Pick the next (or previous) tool by hand: knob turn or button C."""
-        words = list(TOOL_WORDS)
-        self._set_tool(words[(words.index(self.tool.word) + step) % len(words)], by_voice=False)
+    def _manual_select(self, step: int) -> None:
+        """The knob: in solo it changes the instrument, in co-op it moves the assistant's choice."""
+        word = self.mode.on_manual_select(self.tool.word, step)
+        if word:
+            self._set_tool(word, by_voice=False)
+
+    def _handover(self, now: float) -> None:
+        """Button C: in solo the next instrument, in co-op the assistant hands over what was called."""
+        called = self.mode.pending()
+        handover = self.mode.on_handover(self.tool.word, now)
+        if handover.wrong:
+            self.metrics.calls_wrong += 1
+            self.say(f"The surgeon called: {called}", 2)
+            self.bus.publish(GameEvent(kind="wrong_tool", detail=called))
+        elif handover.tool:
+            self._set_tool(handover.tool, by_voice=handover.confirmed)
+        elif self.mode.selection():
+            self.say("No instrument was called", 2)
 
     def _switch_on_light(self, now: float) -> None:
         """Light up the dark zones for a while: knob press or the "light" command."""
@@ -295,7 +308,7 @@ class GameEngine(Service):
             if self.mode.on_tool_call(word, now):
                 self._set_tool(word, by_voice=True)
             else:
-                self.say(f"Call-back: {word}?", self.cfg.coop_callback_window_s)
+                self.say(f"Called: {word}", 2)
                 self.bus.publish(GameEvent(kind="awaiting_callback", detail=word))
         elif word == "cancel":
             if self.previous_tool:
@@ -520,5 +533,6 @@ class GameEngine(Service):
             question_text=self.quiz.pending.text if in_round and self.quiz.pending else "",
             question_left=self.quiz.window_fraction(),
             stress=self.stress.level,
+            nurse_selection=self.mode.selection(),
             max_stress=self.quiz_cfg.max_stress,
         )

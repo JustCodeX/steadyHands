@@ -18,17 +18,17 @@ class PauseOverlay:
         self.glyphs = glyphs
         self._shade = pygame.Surface(size, pygame.SRCALPHA)
         self._shade.fill((6, 14, 20, 170))
-        self._card: pygame.Surface | None = None
+        self._cards: dict[bool, pygame.Surface] = {}
 
     def draw(self, surface: pygame.Surface, snap: GameSnapshot) -> None:
         surface.blit(self._shade, (0, 0))
-        card = self._controls_card()
+        card = self._controls_card(coop=snap.mode != "solo")
         x, y = (self.size[0] - self.W) // 2, (self.size[1] - self.H) // 2 + 16
         surface.blit(card, (x, y))
         self._speed(surface, snap, x + 40, y + 318)
 
-    def _controls_card(self) -> pygame.Surface:
-        if self._card is None:
+    def _controls_card(self, coop: bool) -> pygame.Surface:
+        if coop not in self._cards:
             card = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
             pygame.draw.rect(card, theme.PANEL, (0, 0, self.W, self.H), border_radius=26)
             pygame.draw.rect(card, theme.PANEL_LINE, (0, 0, self.W, self.H), 3, border_radius=26)
@@ -40,6 +40,9 @@ class PauseOverlay:
                 (self.glyphs.button("A", 34), "Button A", "use it, or just hold still for 1 s"),
                 (self.glyphs.button("C", 34), "Button C", "next instrument"),
             ]
+            if coop:  # the assistant picks and hands over what the surgeon called
+                rows[1] = (rows[1][0], "Turn the knob", "assistant: pick the called instrument")
+                rows[4] = (rows[4][0], "Button C", "assistant: hand it over")
             y = 84
             for glyph, what, effect in rows:
                 if glyph is not None:
@@ -53,8 +56,8 @@ class PauseOverlay:
             left = (self.W - b.get_width() - 10 - hint.get_width()) // 2
             card.blit(b, (left, self.H - 50))
             card.blit(hint, (left + b.get_width() + 10, self.H - 50 + 17 - hint.get_height() // 2))
-            self._card = card
-        return self._card
+            self._cards[coop] = card
+        return self._cards[coop]
 
     def _speed(self, surface: pygame.Surface, snap: GameSnapshot, x: int, y: int) -> None:
         """The knob sets the steering speed while paused."""

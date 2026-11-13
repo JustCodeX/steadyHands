@@ -54,7 +54,7 @@ class GameConfig:
     steady_factor: float = 0.4
     steady_duration_s: float = 6.0
     light_duration_s: float = 6.0
-    coop_callback_window_s: float = 5.0
+    coop_callback_window_s: float = 8.0  # the assistant must hand the called instrument over within this time
     result_show_s: float = 12.0
     heart_rate_base: int = 72
     heart_rate_per_contact: int = 22
