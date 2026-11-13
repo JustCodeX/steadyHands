@@ -10,6 +10,7 @@ from collections import deque
 from ..core.config import AudioConfig, TOOL_WORDS
 from ..core.events import GameEvent, PlaybackFinished, PlaybackStarted, RoundResult
 from ..core.service import Service
+from ..voice.audio_input import read_sound_cards, usb_sound_card_present
 from .clip_library import ClipLibrary
 from .phrase_builder import PhraseBuilder
 
@@ -71,6 +72,12 @@ class SoundService(Service):
             self._buzz = pygame.mixer.Sound(buffer=make_buzz_bytes())
             self._ready = True
             log.info("audio out ready; %d clips in %s", self.clips.count(), self.clips.clips_dir)
+            if usb_sound_card_present(read_sound_cards()) is False:
+                # The mixer opens fine on the built-in card, so say it out loud.
+                log.warning(
+                    "no USB headset on the bus; sound goes to the board's line-out "
+                    "(see docs/board-cheatsheet.md, 'No sound in the headset')"
+                )
         except pygame.error as exc:
             log.error("no audio output (%s); sound disabled", exc)
 

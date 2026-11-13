@@ -3,6 +3,7 @@ import numpy as np
 from trainer.core.config import DEFAULT_COMMANDS, VoiceConfig
 from trainer.core.event_bus import EventBus
 from trainer.core.events import CommandEvent, ListenRequest, MisheardEvent, PlaybackStarted, VoiceState, VoiceStateChanged
+from trainer.voice.audio_input import AudioInput, Decimator, usb_sound_card_present
 from trainer.voice.recognizer import SpeechRecognizer, Transcript
 from trainer.voice.signal_processor import SignalProcessor
 from trainer.voice.vad import EnergyVad, Segmenter
@@ -119,3 +120,137 @@ def test_states_follow_listen_and_playback():
     bus.publish(ListenRequest(on=False))
     bus.dispatch()
     assert states == [VoiceState.LISTENING, VoiceState.SPEAKING, VoiceState.OFF]
+
+
+# --- headset microphone: rate conversion and device choice ---------------------
+
+
+def tone(freq, rate, seconds=1.0, level=0.5):
+    t = np.arange(int(rate * seconds)) / rate
+    return (level * 32767 * np.sin(2 * np.pi * freq * t)).astype(np.int16)
+
+
+def rms(x):
+    return float(np.sqrt(np.mean(np.square(x.astype(np.float64)))))
+
+
+def test_decimator_keeps_speech_band_and_removes_what_would_alias():
+    low, high = tone(1000, 48000), tone(10000, 48000)
+    out_low = Decimator(3).process(low)
+    out_high = Decimator(3).process(high)
+    assert len(out_low) == 16000
+    assert abs(rms(out_low[200:]) / rms(low) - 1.0) < 0.02  # level kept
+    assert rms(out_high[200:]) / rms(high) < 0.01  # more than 40 dB down
+    # still a 1 kHz tone at the new rate
+    spectrum = np.abs(np.fft.rfft(out_low[200:16200].astype(np.float64)))
+    assert abs(np.argmax(spectrum) * 16000 / len(out_low[200:]) - 1000) < 5
+
+
+def test_decimator_output_does_not_depend_on_the_block_size():
+    x = tone(700, 48000, seconds=0.5)
+    whole = Decimator(3).process(x)
+    for size in (960, 1000):  # 1000 is not a multiple of 3: the phase must carry over
+        d = Decimator(3)
+        parts = [d.process(x[i : i + size]) for i in range(0, len(x), size)]
+        assert np.array_equal(np.concatenate(parts), whole)
+
+
+class FakeStream:
+    def __init__(self, backend, samplerate, blocksize, device, callback, **kwargs):
+        dev = backend.devices[device] if device is not None else {"rates": {16000}}
+        if samplerate not in dev["rates"]:
+            raise backend.PortAudioError("Invalid sample rate")
+        self.samplerate, self.blocksize, self.device, self.callback = samplerate, blocksize, device, callback
+        backend.streams.append(self)
+
+    def start(self):
+        pass
+
+    def abort(self):
+        self.aborted = True
+
+    def close(self):
+        pass
+
+
+class FakeSoundDevice:
+    """Stands in for the sounddevice module. `plugged` is what a rescan would find."""
+
+    class PortAudioError(Exception):
+        pass
+
+    BUILTIN = {"name": "Arduino-Imola-HPH-LOUT: - (hw:0,2)", "max_input_channels": 4, "default_samplerate": 48000.0, "rates": {16000, 48000}}
+    HEADSET = {"name": "JBL Tune 530C: USB Audio (hw:1,0)", "max_input_channels": 1, "default_samplerate": 48000.0, "rates": {48000}}
+
+    def __init__(self, plugged):
+        self.plugged = list(plugged)
+        self.devices = list(plugged)
+        self.streams = []
+        self.rescans = 0
+
+    def query_devices(self):
+        return self.devices
+
+    def InputStream(self, **kwargs):
+        return FakeStream(self, **kwargs)
+
+    def _terminate(self):
+        pass
+
+    def _initialize(self):
+        self.rescans += 1
+        self.devices = list(self.plugged)
+
+
+def make_input(sd, tmp_path, cards="0 [ArduinoImolaHPH]\n"):
+    cards_file = tmp_path / "cards"
+    cards_file.write_text(cards)
+    return AudioInput(16000, 20, "USB Audio", backend=sd, cards_file=str(cards_file)), cards_file
+
+
+def test_headset_is_opened_at_its_own_rate_and_converted(tmp_path, caplog):
+    sd = FakeSoundDevice([FakeSoundDevice.BUILTIN, FakeSoundDevice.HEADSET])
+    audio, _ = make_input(sd, tmp_path)
+    with caplog.at_level("INFO"):
+        audio.start()
+    stream = sd.streams[-1]
+    assert (stream.device, stream.samplerate, stream.blocksize) == (1, 48000, 960)
+    assert "JBL Tune 530C" in caplog.text and "48000 -> 16000 Hz" in caplog.text
+    stream.callback(tone(1000, 48000, seconds=0.02).reshape(-1, 1), 960, None, None)
+    block = audio.read(timeout=0.1)
+    assert block.dtype == np.int16 and len(block) == 320  # what the pipeline expects
+    audio.stop()
+    assert not audio.running and stream.aborted  # abort: stop() can block for a minute
+
+
+def test_without_headset_the_default_input_is_used_with_one_warning(tmp_path, caplog):
+    sd = FakeSoundDevice([FakeSoundDevice.BUILTIN])
+    audio, _ = make_input(sd, tmp_path)
+    with caplog.at_level("INFO"):
+        audio.start()
+        audio.stop()
+        audio.start()
+    stream = sd.streams[-1]
+    assert (stream.device, stream.samplerate, stream.blocksize) == (None, 16000, 320)
+    assert caplog.text.count("not found") == 1  # not once per listening phase
+    assert sd.rescans == 0  # the sound cards did not change: no rescan
+
+
+def test_headset_that_appears_late_is_found_on_the_next_start(tmp_path):
+    sd = FakeSoundDevice([FakeSoundDevice.BUILTIN])
+    audio, cards_file = make_input(sd, tmp_path)
+    audio.start()
+    assert sd.streams[-1].device is None
+    audio.stop()
+    # the hub connects the headset: the kernel lists a new card, PortAudio's list is stale
+    sd.plugged.append(FakeSoundDevice.HEADSET)
+    cards_file.write_text("0 [ArduinoImolaHPH]\n 1 [T530C]: USB-Audio - JBL Tune 530C\n")
+    audio.start()
+    assert sd.rescans == 1
+    assert (sd.streams[-1].device, sd.streams[-1].samplerate) == (1, 48000)
+
+
+def test_usb_sound_card_detection():
+    assert usb_sound_card_present(" 0 [ArduinoImolaHPH]: qcm2290 - Arduino-Imola-HPH-LOUT\n") is False
+    assert usb_sound_card_present(" 1 [T530C]: USB-Audio - JBL Tune 530C\n") is True
+    assert usb_sound_card_present(None) is None  # not Linux: unknown, so no warning

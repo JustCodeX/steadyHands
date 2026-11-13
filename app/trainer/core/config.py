@@ -70,7 +70,9 @@ class VoiceConfig:
     model_dir: str = str(APP_DIR / "models" / "vosk-model-small-en-us-0.15")
     sample_rate: int = 16000
     block_ms: int = 20
-    input_device: str = ""  # substring of the device name; "" = default
+    # Substring of the device name; "" = default input. "USB Audio" matches a USB
+    # headset ("JBL Tune 530C: USB Audio (hw:1,0)"). Without one the default input is used.
+    input_device: str = "USB Audio"
     highpass_hz: float = 100.0
     agc_target_rms: float = 0.08
     agc_max_gain: float = 12.0
