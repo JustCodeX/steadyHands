@@ -156,8 +156,8 @@ class VoiceService(Service):
             block = self.audio.read(timeout=0.1)
             if block is None:
                 continue
-            x = self.dsp.process(block)
-            speech = self.vad.is_speech(x)
+            filtered, x = self.dsp.split(block)
+            speech = self.vad.is_speech(filtered)
             phase = self.segmenter.update(speech)
             if phase == "start":
                 in_segment = True
@@ -178,11 +178,10 @@ class VoiceService(Service):
         transcript = self.recognizer.finish()
         match = self.matcher.match(transcript.text)
         if match is None:
-            if transcript.text:
-                # speech that resembles no command is ignored silently
-                log.debug("no command in segment (len %d)", len(transcript.text))
-            else:
-                self.bus.publish(MisheardEvent(reason="no_match", speech_end_t=speech_end_t))
+            # Noise, other people talking, or words that resemble no command:
+            # ignored silently, so the game never interrupts a conversation.
+            # "Pardon?" is reserved for a command heard with low confidence.
+            log.debug("segment without a command (text length %d)", len(transcript.text))
             return
         confidence = min(match.score, transcript.confidence if transcript.confidence > 0 else match.score)
         if confidence < self.cfg.confidence_threshold:

@@ -43,6 +43,14 @@ def test_highpass_removes_dc_and_keeps_tone():
     assert float(np.std(tail)) > 0.1
 
 
+def test_split_keeps_vad_input_unlevelled():
+    sp = SignalProcessor(16000, 0.0, target_rms=0.1, max_gain=12.0, release=1.0)
+    quiet = (0.005 * np.random.randn(320)).astype(np.float32)
+    filtered, levelled = sp.split((quiet * 32767).astype(np.int16))
+    assert float(np.sqrt(np.mean(filtered**2))) < 0.01
+    assert float(np.sqrt(np.mean(levelled**2))) > 0.03
+
+
 def test_normalise_lifts_quiet_signal():
     sp = SignalProcessor(16000, 0.0, target_rms=0.1, max_gain=12.0, release=1.0)
     quiet = (0.005 * np.random.randn(320)).astype(np.float32)
@@ -90,13 +98,14 @@ def test_low_confidence_is_misheard_and_gibberish_is_silent():
     bus.dispatch()
     assert len(seen) == 1 and isinstance(seen[0], MisheardEvent)
 
-    bus, svc = make_service(FakeRecognizer("lorem ipsum dolor", 0.9))
-    seen = []
-    bus.subscribe(MisheardEvent, seen.append)
-    bus.subscribe(CommandEvent, seen.append)
-    svc.handle_segment(speech_end_t=1.0)
-    bus.dispatch()
-    assert seen == []  # unrelated talk is ignored
+    for text in ("lorem ipsum dolor", ""):
+        bus, svc = make_service(FakeRecognizer(text, 0.9))
+        seen = []
+        bus.subscribe(MisheardEvent, seen.append)
+        bus.subscribe(CommandEvent, seen.append)
+        svc.handle_segment(speech_end_t=1.0)
+        bus.dispatch()
+        assert seen == []  # unrelated talk and noise are ignored
 
 
 def test_states_follow_listen_and_playback():

@@ -53,8 +53,14 @@ class SignalProcessor:
 
     def process(self, block_int16: np.ndarray) -> np.ndarray:
         """int16 in, float32 in -1..1 out: filtered and levelled."""
+        return self.split(block_int16)[1]
+
+    def split(self, block_int16: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Returns (filtered, filtered and levelled). The VAD must look at the
+        first one: level normalisation would lift background noise to speech level."""
         x = block_int16.astype(np.float32) / 32768.0
-        return self.normalise(self.highpass(x)).astype(np.float32)
+        filtered = self.highpass(x).astype(np.float32)
+        return filtered, self.normalise(filtered).astype(np.float32)
 
     @staticmethod
     def to_int16(x: np.ndarray) -> bytes:

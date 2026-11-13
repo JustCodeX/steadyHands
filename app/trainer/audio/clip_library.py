@@ -34,6 +34,13 @@ class ClipLibrary:
             return None
         import pygame
 
-        sound = pygame.mixer.Sound(str(p))
+        try:
+            sound = pygame.mixer.Sound(str(p))
+        except pygame.error as exc:
+            # e.g. a clip still being written by render_clips.py; try again next time
+            if line_id not in self._missing:
+                self._missing.add(line_id)
+                log.warning("cannot load clip %s: %s", p.name, exc)
+            return None
         self._cache[line_id] = sound
         return sound
