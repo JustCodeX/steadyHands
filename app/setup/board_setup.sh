@@ -9,7 +9,7 @@ cd "$APP_DIR"
 
 echo "== 1/5 system packages (sudo)"
 sudo apt-get install -y --no-install-recommends \
-  python3-venv python3-pygame python3-numpy libportaudio2 espeak-ng xset unzip
+  python3-venv python3-pygame python3-numpy libportaudio2 espeak-ng x11-xserver-utils unzip
 
 echo "== 1b/5 USB host mode for the hub (sudo)"
 # USB adb puts the port into device mode and kicks the hub off; we use SSH instead.
