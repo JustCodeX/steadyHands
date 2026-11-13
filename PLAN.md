@@ -11,7 +11,7 @@ A working prototype of a surgeon trainer: you guide a surgical instrument throug
 ## Why it is worth building
 
 - **It trains what surgery needs:** steady hands, knowing the instrument names, and calling for instruments clearly while both hands are busy.
-- **It trains the team, not just the hands.** In co-op mode, the surgeon calls for an instrument and the assistant repeats it back before the instrument is handed over. Operating-room teams confirm instructions out loud the same way (closed-loop communication), so the two only succeed if they talk to each other.
+- **It trains the team, not just the hands.** In co-op mode, the surgeon calls for an instrument and the assistant has to pick and hand over exactly that one. Operating-room teams close the loop on every instruction the same way (closed-loop communication), so the two only succeed if they listen to each other.
 - **It gives measurable feedback.** After each round, the trainer shows time, wall contacts, steadiness, and instrument calls, so trainees can see their progress (see [Training feedback](#training-feedback)).
 - **It is cheap, offline, and private.** It uses off-the-shelf parts and needs no internet or cloud, and it stores no audio. Training centres and medical schools with small budgets or poor connectivity can build and use it.
 - **It is energy-aware.** Speech recognition runs only while a round is in progress and someone is speaking, and we measure the energy used (see [Energy and environment](#energy-and-environment)).
@@ -51,8 +51,9 @@ The surgeon holds the **instrument**, a handle containing the Modulino Movement,
 
 ### Co-op mode (two players)
 
-- The **surgeon** steers and calls for instruments out loud ("Clamp!").
-- The **assistant** wears the headset and repeats each call back ("Clamp."). The game hands the instrument over when it hears the call-back. Operating-room teams use this closed-loop confirmation too.
+- The **surgeon** wears the headset, steers, and calls for instruments ("Clamp!"). A call alone changes nothing.
+- The **assistant** has the knob and the buttons. The knob picks an instrument from the tray and button C hands it over. The game accepts only the instrument that was called, and only within 8 seconds of the call. Offering another instrument counts as a wrong call. Operating-room teams close the loop on every instruction in the same way.
+- One microphone cannot tell two voices apart, so the assistant confirms with the hands and not by repeating the word.
 - The assistant also runs the room by voice: switching on the light, and calling "steady" for precision mode.
 
 ### Controls
@@ -60,8 +61,8 @@ The surgeon holds the **instrument**, a handle containing the Modulino Movement,
 | Input | Action |
 | --- | --- |
 | Modulino Movement (in the instrument) | Tilt moves the tool tip |
-| Modulino Knob | Menu: picks the level · Round: turn picks the instrument, press switches on the light in dark zones · Paused: steering sensitivity |
-| Modulino Buttons A / B / C | A: start, use the instrument · B: pause/continue · C: next instrument in a round; in the menu, switch between one-player and co-op |
+| Modulino Knob | Menu: picks the level · Round: turn picks the instrument (co-op: the assistant's choice), press switches on the light in dark zones · Paused: steering sensitivity |
+| Modulino Buttons A / B / C | A: start, use the instrument · B: pause/continue · C: next instrument in a round (co-op: hand over the chosen instrument); in the menu, switch between one-player and co-op |
 | Modulino Distance (optional, stretch) | Hand height sets depth: lower your hand to grab, raise it to travel |
 | Voice | Tool and room commands (see below) |
 
@@ -88,7 +89,20 @@ Each level is a PNG mask with a small JSON file:
 - the mask has black walls, white corridors, and coloured item spots,
 - the JSON holds the start point, the items, and the tool each item needs.
 
-Collision detection is a pixel lookup in the mask, so anyone on the team can draw levels. Target: three levels for the demo.
+Collision detection is a pixel lookup in the mask, so anyone on the team can draw levels. Six levels ship; they get narrower and shorter, and the patient asks more questions.
+
+### Questions during the round
+
+While the surgeon steers, the patient asks a question ("A vessel is bleeding. Which instrument stops it?"). The question is also shown on screen with the time left to answer.
+
+- **The answer is spoken as a whole sentence** ("I would take a clamp for that"). Every question has a fixed set of options, and the game works out which option the sentence means.
+- **A right answer** lowers the stress level by one.
+- **A wrong answer, or none within 8 seconds,** costs 5 seconds, raises the pulse, and adds one stress level (up to three). Each level makes the instrument 15 % faster, so harder to steer, and the bleeding timers 25 % faster. The patient then says the right answer.
+- **An unclear answer** gets a "Pardon?" once. The second unclear answer counts as wrong.
+- `repeat` says the question again.
+- The first level asks nothing. Each level sets how many questions it asks and from which topics (`quiz` in `level.json`).
+
+The questions are in `app/assets/questions.json`: instruments, the operating room, patient safety, and basic anatomy. Questions and answers are rendered to speech once at setup, like every other patient line.
 
 ### Training feedback
 
@@ -101,6 +115,7 @@ After each round, the screen shows:
 | Steadiness | Jitter in the filtered tilt signal while moving through corridors |
 | Instrument calls | Correct calls, and calls for the wrong instrument for the task |
 | Precision help | How often `steady` was used |
+| Questions | How many of the patient's questions were answered correctly |
 
 Levels get harder step by step, with narrower corridors and less time. Results are kept as numbers for the current session only. No audio and no personal data are stored.
 
@@ -393,6 +408,8 @@ The events on the bus are the interface tables above, written as classes: `Input
 | --- | --- |
 | A sensor | Firmware: a class in `firmware/lib/<Name>/` deriving from `InputSource`; a new field in `InputFrame`; one line in `main.cpp`. Linux: read the field from the `InputFrame` event. |
 | An output (LED, motor) | Firmware: a class deriving from `Module`, plus a new Bridge command in `BridgeLink`. Linux: a matching method in `McuLink`. |
+| A quiz question | An entry in `app/assets/questions.json`, then `python tools/render_clips.py` on the board |
+| Another way to judge a spoken quiz answer | A subclass of `AnswerEvaluator`, selected in the config |
 | An instrument | A subclass of `Instrument` in `app/trainer/game/instruments/`; its command word in the config; a reference to it in the level JSON |
 | A game mode | A subclass of `GameMode` |
 | Another speech-to-text engine | A subclass of `SpeechRecognizer`, selected in the config |
@@ -405,11 +422,12 @@ The events on the bus are the interface tables above, written as classes: `Input
 2. **Signal processing:** a high-pass filter (removes rumble below about 100 Hz) and level normalisation, so that quiet and loud speakers are handled the same way.
 3. **Gate:** voice activity detection (Silero VAD or WebRTC VAD). Speech-to-text runs only on detected speech segments.
 4. **Speech-to-text (❓ D2, Timon):** the default in the code is `VoskRecognizer` (Vosk small English with its vocabulary restricted to our command phrases). Restricting the vocabulary makes recognition more robust, and the model is small. Alternatives (Whistle, Whisper tiny) are further `SpeechRecognizer` subclasses, selected with `voice.recognizer` in the config. Whatever is chosen gets measured in M0 on 20 spoken commands with real hall noise.
-5. **Response:** every recognised command appears on screen. Target: under 1 s from the end of a word to the tool change (to be measured).
-6. **Text-to-speech:** Piper with an English voice. We render all patient lines to WAV once at setup, so the game only plays files and there is no speech synthesis during play.
-7. **Privacy and security:**
+5. **Spoken answers:** while a quiz question is open, speech is an answer and not a command. A second recogniser hears it, without the restricted vocabulary so that whole sentences work. It uses the same loaded Vosk model, so it adds no second model to memory or disk, and it runs only during the answer window. An `AnswerEvaluator` then maps the sentence to one of the question's options; the default looks for the options' phrases, and a tool-calling model can replace it ([docs/needle-integration.md](docs/needle-integration.md)). If free speech proves unreliable in hall noise, `voice.answer_vocabulary = "keywords"` restricts this recogniser to the answer phrases.
+6. **Response:** every recognised command appears on screen. Target: under 1 s from the end of a word to the tool change (to be measured).
+7. **Text-to-speech:** Piper with an English voice. We render all patient lines to WAV once at setup, so the game only plays files and there is no speech synthesis during play.
+8. **Privacy and security:**
    - Audio exists only in memory. It is never written to disk and never sent anywhere.
-   - Transcripts are not logged either. The log contains only the recognised command word and its timing.
+   - Transcripts are not logged either. The log contains only the recognised command word and its timing. A spoken quiz answer leaves the voice service only as a verdict (right, wrong, or unclear).
    - During play, the trainer needs no network and exposes no network services. In demo mode, Wi-Fi is switched off where possible, which also saves energy.
    - Training scores are kept for the current session only.
 
@@ -447,6 +465,7 @@ The 4 GB RAM is shared by Debian, the desktop, the game, and speech. We measure 
 | Speech-to-text: Vosk small | Around 300 MB | Hackathon README, model catalogue |
 | Piper | Runs only at setup, to pre-render the patient lines; not loaded during play | |
 | VAD | Small; measure | |
+| Second Vosk recogniser for quiz answers | Shares the loaded model; measure the difference | |
 | Game (pygame) | Measure | |
 
 Leaving out an LLM saves the most: the README estimates about 1 GB of RAM for a 1B model.
@@ -456,6 +475,7 @@ Leaving out an LLM saves the most: the README estimates about 1 GB of RAM for a 
 **What we do:**
 - Speech-to-text runs only during a round, and only when VAD detects speech.
 - A fixed command list allows a small model.
+- The open-vocabulary recogniser for quiz answers runs only while a question is open, behind the same VAD.
 - Patient lines are pre-rendered; there is no text-to-speech during play.
 - Rendering is capped at 30 fps. The map is pre-rendered, so only the moving parts are redrawn.
 - The MCU filters the sensors and sends 50 frames per second, so Linux does not poll.
@@ -578,7 +598,7 @@ Sources: the event constraints and our proposed team requirements from the hacka
 | P2 | One end-to-end task, done reliably | One-player round from start to feedback | 10 runs in a row without a restart | ⬜ |
 | P3 | Help, repeat, cancel | [Voice commands](#voice-commands) `help`, `repeat`, `cancel` | Each tested 5 times | 🟡 |
 | P4 | Listening, processing, and speaking states visible | Microphone icon on screen, on-board RGB LED 4 ([Speech interaction](#speech-interaction)) | Every state seen in a demo round | 🟡 |
-| P5 | Graceful recovery from misheard speech | Confidence threshold, "Pardon?", hint with fitting commands, `cancel`, button fallback | Test with wrong and unclear words | 🟡 |
+| P5 | Graceful recovery from misheard speech | Confidence threshold, "Pardon?", hint with fitting commands, `cancel`, button fallback; an unclear quiz answer is asked for again | Test with wrong and unclear words, and with unclear answers | 🟡 |
 | P6 | Response within 3–5 s after speech ends | Target under 1 s; pre-rendered replies | Median and worst value over 20 tries | ⬜ |
 | P7 | Local within 4 GB RAM; no stored audio; no cloud | Covered by C1 and C2 | Evidence from C1 and C2 | ⬜ |
 | P8 | Available peripherals and open-source components; latency and energy measured | Modulinos, headset, display; open models; measurement plan | Measured values in the README | ⬜ |

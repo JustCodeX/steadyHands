@@ -40,6 +40,12 @@ rendered clips fit, but there is no room for several model candidates at once.
 | --- | --- | --- | --- |
 | | | | |
 
+Quiz answers (end of speech to verdict, `answer_latency_ms`; answers are whole sentences, so segments are longer):
+
+| Tries | Median (ms) | Worst (ms) | Date / setup |
+| --- | --- | --- | --- |
+| | | | |
+
 *(increment 1)* End of speech → start of spoken answer: **301–861 ms** over the
 day (microphone → STT → matcher → pre-rendered clip, model loaded once at
 start). P6 requires 3–5 s, so even the worst case has ~4× headroom. Treat this
@@ -56,6 +62,7 @@ clips), median over the session; n = 195 (idle) / 23 (menu) samples.
 | Menu | 2139 | 277 | 48 |
 | Round, nobody speaking | | | |
 | Round, speaking | | | |
+| Round, answering a quiz question (open-vocabulary recogniser) | | | |
 
 **C1 (at least 1 GB free): met so far** — minimum observed MemAvailable was
 1349 MB, median above 2.1 GB.
@@ -124,5 +131,6 @@ font size.
 
 - Power per state, energy per round (PeakTech, see [WIRING.md](../WIRING.md#energy-measurement-with-the-peaktech))
 - Latency on this stack: 20 spoken commands → median/worst from `metrics.csv`
-- Memory/CPU for the two in-round states
+- Memory/CPU for the two in-round states, and with a quiz question open (second recogniser)
+- Quiz answers: latency over 20 answers, and recognition of 20 spoken answers (see [tests.md](tests.md))
 - Matcher threshold hardening test in hall noise (co-op false triggers)

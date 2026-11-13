@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 
 from ..core.config import SystemConfig
-from ..core.events import CommandEvent, GameEvent, GameSnapshot, GameState, MisheardEvent, VoiceStateChanged
+from ..core.events import AnswerEvent, CommandEvent, GameEvent, GameSnapshot, GameState, MisheardEvent, VoiceStateChanged
 from ..core.service import Service
 
 log = logging.getLogger(__name__)
@@ -64,7 +64,9 @@ class MetricsLogger(Service):
         self._last_sample = 0.0
         self._last_cpu = read_cpu_times()
         self.latencies_ms: list[float] = []
+        self.answer_latencies_ms: list[float] = []
         bus.subscribe(CommandEvent, self._on_command)
+        bus.subscribe(AnswerEvent, self._on_answer)
         bus.subscribe(MisheardEvent, self._on_misheard)
         bus.subscribe(GameEvent, self._on_game_event)
         bus.subscribe(GameSnapshot, self._on_snapshot)
@@ -97,6 +99,14 @@ class MetricsLogger(Service):
             self.latencies_ms.append(ms)
             self.row("command_latency_ms", f"{ms:.0f}")
         self.row("command", ev.word)
+
+    def _on_answer(self, ev: AnswerEvent) -> None:
+        """A quiz answer: the verdict and how long it took, never the words."""
+        if ev.speech_end_t is not None:
+            ms = (time.monotonic() - ev.speech_end_t) * 1000.0
+            self.answer_latencies_ms.append(ms)
+            self.row("answer_latency_ms", f"{ms:.0f}")
+        self.row("answer", "unclear" if ev.unclear else "correct" if ev.correct else "wrong")
 
     def _on_misheard(self, ev: MisheardEvent) -> None:
         self.row("misheard", ev.reason)

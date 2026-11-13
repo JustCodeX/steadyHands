@@ -28,3 +28,31 @@ Evidence for the criteria check. One line per run, with date and who ran it.
 
 | Command | Tries | Correct | Wrong | Missed |
 | --- | --- | --- | --- | --- |
+
+## Quiz answers in whole sentences (20 answers)
+
+With `voice.answer_vocabulary = "open"` (the default). Run with `--config debug-asr.toml` to see what the recogniser heard; add phrases it mishears to the option in `app/assets/questions.json`. If fewer than 16 of 20 are right, repeat with `answer_vocabulary = "keywords"` and keep the better setting.
+
+| Setting | Tries | Right verdict | Wrong verdict | Unclear ("Pardon?") | Not heard |
+| --- | --- | --- | --- | --- | --- |
+| open | | | | | |
+| keywords | | | | | |
+
+| Case | Expected reaction | Observed |
+| --- | --- | --- |
+| right answer in a sentence | "Correct." and no penalty | |
+| wrong answer | "Wrong.", the right answer is spoken, 5 s less, one stress arrow | |
+| no answer for 8 s | "Too slow.", same penalty as a wrong answer | |
+| unclear answer, then a clear one | "Pardon?", then the verdict | |
+| "repeat" while a question is open | the question is spoken again | |
+| an instrument word as the answer | counts as the answer; the instrument in hand does not change | |
+| 20 plain commands afterwards | recognised as well as before the quiz was added | |
+
+## Co-op hand-over
+
+| Case | Expected reaction | Observed |
+| --- | --- | --- |
+| surgeon calls, assistant picks that instrument and presses C | instrument changes; counted as a correct call | |
+| assistant presses C on another instrument | "That is the wrong instrument."; counted as a wrong call; the call stays open | |
+| assistant presses C without a call | nothing changes; "No instrument was called" on screen | |
+| assistant waits longer than 8 s | the call runs out; nothing changes | |

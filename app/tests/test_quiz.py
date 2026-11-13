@@ -270,3 +270,21 @@ def test_every_question_and_explanation_gets_a_clip():
     assert "q_q0" not in all_lines()
     for needed in ("quiz_correct", "quiz_wrong", "quiz_timeout", "quiz_all", "quiz_some", "quiz_none"):
         assert needed in lines
+
+
+def test_metrics_log_holds_the_verdict_and_latency_of_an_answer(tmp_path):
+    import time
+
+    from trainer.core.config import SystemConfig
+    from trainer.system.metrics_logger import MetricsLogger
+
+    bus = EventBus()
+    logger = MetricsLogger(bus, SystemConfig(metrics_log=str(tmp_path / "m.csv")))
+    logger.start()
+    bus.publish(AnswerEvent(question_id="q0", correct=True, speech_end_t=time.monotonic() - 0.2))
+    bus.publish(AnswerEvent(question_id="q0", unclear=True))
+    bus.dispatch()
+    logger.stop()
+    rows = [line.split(",")[1:3] for line in (tmp_path / "m.csv").read_text().splitlines()[1:]]
+    assert rows[0][0] == "answer_latency_ms" and 150 <= float(rows[0][1]) <= 1000
+    assert rows[1:] == [["answer", "correct"], ["answer", "unclear"]]
