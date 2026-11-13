@@ -1,27 +1,27 @@
 """Needle and Whistle against a stand-in for the Cactus runtime.
 
-The stand-in behaves the way the runtime is documented to: tools are plain
-functions the agent executes, `reset()` must come before every independent
-text, and a call below the confidence gate is reported but not executed.
-The real runtime is only on the board; these tests cover our side of it.
+The stand-in follows cactus-compute 4.2.0 as read from its source: tools are
+JSON schemas, `complete()` returns the proposed calls without executing them,
+a call below confidence 0.1 lands in "suppressed_calls", `reset()` must come
+before every independent text, and `close()` ends the worker process. The
+real runtime is covered by tests/test_cactus_real.py.
 """
-import inspect
+import json
 import os
 import sys
 import types
-import typing
 
 import numpy as np
 import pytest
 
 from trainer.cactus_models import needle_agent, whistle_recognizer
-from trainer.cactus_models.needle_agent import NeedleAgent, choice_tool, plain_tool
+from trainer.cactus_models.needle_agent import NeedleAgent, tool_schema
 from trainer.cactus_models.needle_evaluator import NeedleEvaluator
 from trainer.cactus_models.needle_interpreter import NeedleInterpreter
 from trainer.cactus_models.runtime import load_cactus
 from trainer.cactus_models.whistle_recognizer import WhistleRecognizer
-from trainer.core.config import DEFAULT_COMMANDS, QuizConfig, VoiceConfig
-from trainer.game.actions import ActionCatalog
+from trainer.core.config import DEFAULT_COMMANDS, DEFAULT_TREATMENTS, QuizConfig, VoiceConfig
+from trainer.game.actions import MODEL_ACTIONS, ActionCatalog
 from trainer.quiz import KeywordEvaluator, QuestionBank
 from trainer.voice.command_matcher import CommandMatcher
 from trainer.voice.recognizer import EnsembleRecognizer, NullRecognizer
@@ -31,35 +31,44 @@ BANK = QuestionBank.load(QuizConfig().questions_file)
 
 
 class FakeAgent:
-    def __init__(self, tools, system, weights, script):
-        self.tools = {t.__name__: t for t in tools}
-        self.system, self.weights, self.script = system, weights, script
+    def __init__(self, tools, system, weights, script, auto_date=True):
+        assert isinstance(tools, str), "tools go to the runtime as JSON"
+        self.tools = {t["name"]: t for t in json.loads(tools)}
+        self.system, self.weights, self.script, self.auto_date = system, weights, script, auto_date
         self.fresh = False
+        self.closed = False
         self.heard = []
 
     def reset(self):
         self.fresh = True
 
-    def run(self, text):
+    def close(self):
+        self.closed = True
+
+    def complete(self, text):
+        assert not self.closed
         assert self.fresh, "reset() must be called before every independent text"
         self.fresh = False
         self.heard.append(text)
         planned = self.script.get(text, [])
         if isinstance(planned, Exception):
             raise planned
-        suppressed, confidence = [], 0.0
+        calls, confidence = [], 0.7
         for name, arguments, conf in planned:
             tool = self.tools[name]
-            hints = typing.get_type_hints(tool)
-            assert set(arguments) == set(inspect.signature(tool).parameters)
+            properties = tool["parameters"]["properties"]
+            assert set(arguments) == set(properties)
             for key, value in arguments.items():
-                assert value in typing.get_args(hints[key]), f"{value!r} is not allowed for {name}.{key}"
+                assert value in properties[key]["enum"], f"{value!r} is not allowed for {name}.{key}"
+            calls.append({"name": name, "arguments": arguments})
             confidence = conf
-            if conf < 0.1:  # the runtime's own gate: reported, not executed
-                suppressed.append({"name": name, "arguments": arguments})
-            else:
-                tool(**arguments)
-        return {"confidence": confidence, "suppressed_calls": suppressed}
+        gated = confidence is not None and confidence < 0.1  # the runtime's own gate: reported, not proposed
+        return {
+            "type": "call",
+            "function_calls": [] if gated else calls,
+            "suppressed_calls": calls if gated else [],
+            "confidence": confidence,
+        }
 
 
 class FakeCactus:
@@ -69,12 +78,8 @@ class FakeCactus:
         self.transcriptions = []
         self.heard_text = heard_text
 
-    def tool(self, fn):
-        assert fn.__doc__ and fn.__name__.isidentifier()
-        return fn
-
-    def Cactus(self, tools, system, weights):  # noqa: N802
-        self.agents.append(FakeAgent(tools, system, weights, self.script))
+    def Cactus(self, tools, system, weights, auto_date=True):  # noqa: N802
+        self.agents.append(FakeAgent(tools, system, weights, self.script, auto_date))
         return self.agents[-1]
 
     def transcribe(self, audio, language=None, keywords=None, word_timestamps=False, weights=None):
@@ -122,26 +127,23 @@ def test_nothing_outside_the_package_imports_the_runtime():
 
 
 def test_tools_tell_the_model_their_name_purpose_and_allowed_values():
-    seen = []
-    tool = choice_tool("answer", "Record the answer.", "the option meant", ["clamp", "swab"], lambda n, a: seen.append((n, a)))
-    assert tool.__name__ == "answer"
-    assert typing.get_args(typing.get_type_hints(tool)["choice"]) == ("clamp", "swab")
-    assert "Record the answer." in tool.__doc__ and "choice: the option meant" in tool.__doc__
-    tool(choice="swab")
-    plain = plain_tool("steady", "Precision mode.", lambda n, a: seen.append((n, a)))
-    assert not inspect.signature(plain).parameters
-    plain()
-    assert seen == [("answer", {"choice": "swab"}), ("steady", {})]
+    tool = tool_schema("answer", "Record the answer.", {"choice": (["clamp", "swab"], "the option meant")})
+    assert tool == {
+        "name": "answer",
+        "description": "Record the answer.",
+        "parameters": {
+            "type": "object",
+            "properties": {"choice": {"type": "string", "enum": ["clamp", "swab"], "description": "the option meant"}},
+            "required": ["choice"],
+        },
+    }
+    assert tool_schema("steady", "Precision mode.")["parameters"] == {"type": "object", "properties": {}, "required": []}
 
 
 def make_agent(monkeypatch, weights, script):
     fake = use(monkeypatch, FakeCactus(script))
-    agent = NeedleAgent(
-        weights,
-        "system text",
-        lambda record: [plain_tool("steady", "Precision mode.", record), choice_tool("pick", "Pick one.", "which", ["a", "b"], record)],
-    )
-    return fake, agent
+    tools = [tool_schema("steady", "Precision mode."), tool_schema("pick", "Pick one.", {"choice": (["a", "b"], "which")})]
+    return fake, NeedleAgent(weights, "system text", tools)
 
 
 def test_agent_returns_the_call_the_model_made(monkeypatch, weights):
@@ -149,7 +151,11 @@ def test_agent_returns_the_call_the_model_made(monkeypatch, weights):
     call = agent.call("the first")
     assert (call.name, call.arguments, call.confidence) == ("pick", {"choice": "a"}, 0.7)
     assert agent.call("slow down").name == "steady"  # the fake fails if reset() was skipped in between
-    assert len(fake.agents) == 1 and fake.agents[0].system == "system text" and fake.agents[0].weights == str(weights)
+    assert len(fake.agents) == 1
+    made = fake.agents[0]
+    assert made.system == "system text" and made.weights == str(weights) and made.auto_date is False
+    agent.unload()
+    assert made.closed  # the worker process ends with the agent
 
 
 def test_agent_gives_nothing_when_the_model_is_unsure_or_wants_two_things(monkeypatch, weights):
@@ -160,12 +166,16 @@ def test_agent_gives_nothing_when_the_model_is_unsure_or_wants_two_things(monkey
             "held back": [("pick", {"choice": "a"}, 0.05)],
             "both": [("pick", {"choice": "a"}, 0.8), ("pick", {"choice": "b"}, 0.8)],
             "twice": [("pick", {"choice": "a"}, 0.8), ("pick", {"choice": "a"}, 0.8)],
+            "no head": [("pick", {"choice": "b"}, None)],
         },
     )
     assert agent.call("what a nice day") is None  # no tool fits
-    assert agent.call("held back") is None  # below the runtime's gate: not executed
+    assert agent.call("held back") is None  # below the runtime's gate
     assert agent.call("both") is None
     assert agent.call("twice").arguments == {"choice": "a"}
+    assert agent.call("no head").confidence == 1.0  # weights without a confidence head: no gate
+    agent.min_confidence = 0.03
+    assert agent.call("held back").arguments == {"choice": "a"}  # a looser gate than the runtime's takes suppressed calls
     agent.min_confidence = 0.9
     assert agent.call("twice") is None  # our own, stricter gate
 
@@ -179,34 +189,38 @@ def test_agent_needs_its_weights(monkeypatch, tmp_path):
 # --- NeedleInterpreter -------------------------------------------------------------
 
 
-def test_interpreter_asks_the_model_only_when_no_command_phrase_was_said(monkeypatch, weights):
+def test_interpreter_asks_the_model_only_when_no_treatment_phrase_was_said(monkeypatch, weights):
     script = {
-        "something to stop the bleeding": [("select_instrument", {"choice": "clamp"}, 0.8)],
-        "lets carry on": [("resume", {}, 0.6)],
-        "i need more light in here": [("light", {}, 0.7)],
-        "hand me the forcep": RuntimeError("engine fell over"),
+        "he can't breathe": [("give_oxygen", {}, 0.8)],
+        "the patient is waking up": [("deepen_anaesthesia", {}, 0.6)],
+        "his heart is barely pumping": RuntimeError("engine fell over"),
     }
     fake = use(monkeypatch, FakeCactus(script))
-    interpreter = NeedleInterpreter(DEFAULT_COMMANDS, weights)
+    interpreter = NeedleInterpreter(DEFAULT_TREATMENTS, weights)
     agent = fake.agents[0]
-    assert sorted(agent.tools) == sorted(["select_instrument", "steady", "light", "cancel", "repeat", "help", "pause", "resume", "new_game"])
-    assert typing.get_args(typing.get_type_hints(agent.tools["select_instrument"])["choice"]) == ("forceps", "swab", "clamp", "scalpel")
+    assert sorted(agent.tools) == sorted(a.name for a in MODEL_ACTIONS)  # the treatments, nothing else
 
-    assert interpreter.interpret("clamp").word == "clamp"
-    assert interpreter.interpret("i need more light in here").score == 1.0  # "light" is in the sentence
+    assert interpreter.interpret("oxygen").word == "oxygen"
+    assert interpreter.interpret("give him some adrenaline now").score == 1.0  # the phrase is in the sentence
     assert agent.heard == []  # neither needed the model
 
-    hit = interpreter.interpret("something to stop the bleeding")
-    assert (hit.word, hit.score) == ("clamp", 0.8)
-    assert interpreter.interpret("lets carry on").word == "continue"
-    # talk is not a command, even where the fuzzy matcher alone would hear "light" in "night"
-    assert CommandMatcher(DEFAULT_COMMANDS).interpret("did you see the game last night").word == "light"
+    hit = interpreter.interpret("he can't breathe")
+    assert (hit.word, hit.score) == ("oxygen", 0.8)
+    assert interpreter.interpret("the patient is waking up").word == "anaesthesia"
+    assert interpreter.interpret("the patient is waking up", allowed=["oxygen"]) is None
+    # talk and older commands are not treatments, and without a trigger word the model does not even run
+    heard = len(agent.heard)
     assert interpreter.interpret("did you see the game last night") is None
-    assert interpreter.interpret("something to stop the bleeding", allowed=["forceps", "pause"]) is None
-    # a failing model must not stop the game: the matcher's guess is the fallback
-    assert interpreter.interpret("hand me the forcep").word == "forceps"
+    assert interpreter.interpret("give me the clamp") is None
+    assert len(agent.heard) == heard
+    interpreter.require_trigger = False
+    assert interpreter.interpret("did you see the game last night") is None  # the model said: no tool
+    assert len(agent.heard) == heard + 1
+    interpreter.require_trigger = True
+    # a failing model must not stop the game: no guess becomes a treatment
+    assert interpreter.interpret("his heart is barely pumping") is None
     assert interpreter.interpret("") is None
-    assert interpreter.phrases() == CommandMatcher(DEFAULT_COMMANDS).phrases()
+    assert interpreter.phrases() == CommandMatcher(DEFAULT_TREATMENTS).phrases()
 
 
 # --- NeedleEvaluator ---------------------------------------------------------------
@@ -225,8 +239,9 @@ def test_evaluator_asks_the_model_only_when_no_option_was_named(monkeypatch, wei
     assert len(fake.agents) == 1
     agent = fake.agents[0]
     assert question.text in agent.system
-    assert typing.get_args(typing.get_type_hints(agent.tools["answer"])["choice"]) == tuple(question.options)
-    assert "clamp (clamp, clamps" in agent.tools["answer"].__doc__
+    choice = agent.tools["answer"]["parameters"]["properties"]["choice"]
+    assert choice["enum"] == list(question.options)
+    assert "clamp (clamp, clamps" in choice["description"]
 
     assert evaluator.evaluate(question, "i would take a clamp").choice == "clamp"
     assert evaluator.evaluate(question, "the forceps no wait the clamp").choice is None  # two options: ask again
@@ -239,7 +254,8 @@ def test_evaluator_asks_the_model_only_when_no_option_was_named(monkeypatch, wei
 
     other = BANK.get("fast_pulse")
     evaluator.prepare(other)
-    assert len(fake.agents) == 2 and typing.get_args(typing.get_type_hints(fake.agents[1].tools["answer"])["choice"]) == ("yes", "no")
+    assert len(fake.agents) == 2 and fake.agents[1].tools["answer"]["parameters"]["properties"]["choice"]["enum"] == ["yes", "no"]
+    assert agent.closed  # the previous question's worker process is gone
 
 
 def test_evaluator_without_a_working_model_is_the_keyword_evaluator(monkeypatch, weights, tmp_path):
@@ -342,23 +358,31 @@ def test_eval_cases_fit_the_game_and_never_contain_a_phrase_the_keywords_catch(m
     sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1] / "tools"))
     import needle_eval
 
-    matcher, keywords = CommandMatcher(DEFAULT_COMMANDS), KeywordEvaluator()
+    cases = needle_eval.load_cases()
+    every_phrase = {**DEFAULT_COMMANDS, **DEFAULT_TREATMENTS}
+    matcher, keywords, catalog = CommandMatcher(every_phrase), KeywordEvaluator(), ActionCatalog(MODEL_ACTIONS)
     script = {}
-    for said, expected in needle_eval.COMMAND_CASES:
-        assert expected is None or expected in DEFAULT_COMMANDS
+    for case in cases["commands"]:
+        said, expected = case["said"], case["expected"]
+        assert case["kind"] in ("treatment", "talk", "status", "old_command")
+        assert (expected in DEFAULT_TREATMENTS) if case["kind"] == "treatment" else expected is None
         hit = matcher.interpret(said)
-        assert hit is None or hit.score < 1.0, f"{said!r} never reaches the model"
+        assert hit is None or hit.score < 1.0, f"{said!r} contains a phrase: Vosk or the keywords catch it, the model never sees it"
         if expected is not None:
-            name = next(a.name for a in ActionCatalog().actions() if expected in a.command_words())
-            script[said] = [(name, {"choice": expected} if name == "select_instrument" else {}, 0.8)]
-    for question_id, said, expected in needle_eval.ANSWER_CASES:
-        question = BANK.get(question_id)
-        assert question is not None and (expected is None or expected in question.options)
-        assert not keywords.evaluate(question, said).named, f"{said!r} never reaches the model"
-        if expected is not None:
-            script[said] = [("answer", {"choice": expected}, 0.8)]
+            action = next(a for a in MODEL_ACTIONS if expected in a.command_words())
+            script[said] = [(action.name, {}, 0.8)]
+            assert catalog.command_word(action.name) == expected
+    assert sum(c["expected"] is None for c in cases["commands"]) >= 20  # enough talk to count false triggers
+    assert sum(not needle_eval.has_trigger_word(c["said"]) for c in cases["commands"] if c["expected"]) >= 5
+    for case in cases["answers"]:
+        question = BANK.get(case["question"])
+        assert question is not None and (case["expected"] is None or case["expected"] in question.options)
+        assert not keywords.evaluate(question, case["said"]).named, f"{case['said']!r} never reaches the model"
+        if case["expected"] is not None:
+            script[case["said"]] = [("answer", {"choice": case["expected"]}, 0.8)]
     use(monkeypatch, FakeCactus(script))
-    assert needle_eval.main([str(weights)]) == 0  # a model that answers as hoped passes
-    assert f"{len(needle_eval.COMMAND_CASES) + len(needle_eval.ANSWER_CASES)}/" in capsys.readouterr().out
+    assert needle_eval.main([str(weights), "--quiz", "--no-trigger-gate"]) == 0  # a model that answers as hoped passes
+    out = capsys.readouterr().out
+    assert "PASS" in out and f"quiz {len(cases['answers'])}/{len(cases['answers'])}" in out
     use(monkeypatch, FakeCactus({}))
     assert needle_eval.main([str(weights), "--json"]) == 1  # one that never calls a tool does not

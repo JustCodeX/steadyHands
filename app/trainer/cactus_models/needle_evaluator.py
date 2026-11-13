@@ -8,19 +8,17 @@ from pathlib import Path
 from ..quiz.evaluator import AnswerEvaluator, KeywordEvaluator, Verdict
 from ..quiz.question import Question
 from . import needle_agent
-from .needle_agent import NeedleAgent, Record, choice_tool
+from .needle_agent import RUNTIME_GATE, NeedleAgent, tool_schema
 
 log = logging.getLogger(__name__)
 
 
-def answer_tool(question: Question, record: Record):
+def answer_tool(question: Question) -> dict:
     options = "; ".join(f"{option} ({', '.join(phrases[:3])})" for option, phrases in question.options.items())
-    return choice_tool(
+    return tool_schema(
         "answer",
         "Record which of the possible answers the player gave. Do not call this if the player named none of them.",
-        f"the answer the player means. Possible answers: {options}",
-        list(question.options),
-        record,
+        {"choice": (list(question.options), f"the answer the player means. Possible answers: {options}")},
     )
 
 
@@ -30,7 +28,7 @@ class NeedleEvaluator(AnswerEvaluator):
     there the recognisers disagreed, or the player did, and a guess could
     turn a right answer into a wrong one."""
 
-    def __init__(self, weights: str | Path, min_confidence: float = 0.1, agent_factory=None) -> None:
+    def __init__(self, weights: str | Path, min_confidence: float = RUNTIME_GATE, agent_factory=None) -> None:
         self.weights = Path(weights)
         self.min_confidence = min_confidence
         self._keywords = KeywordEvaluator()
@@ -45,13 +43,14 @@ class NeedleEvaluator(AnswerEvaluator):
 
     def _make_agent(self, question: Question) -> NeedleAgent:
         system = f"quiz in a surgical training game. The player was asked: {question.text} locale: en-US"
-        return NeedleAgent(self.weights, system, lambda record: [answer_tool(question, record)], self.min_confidence)
+        return NeedleAgent(self.weights, system, [answer_tool(question)], self.min_confidence)
 
     def prepare(self, question: Question) -> None:
         """Build the agent for this question while the patient is still asking it."""
         if self._question_id == question.id and self._agent is not None:
             return
-        self._question_id, self._agent = question.id, None
+        self.unload()
+        self._question_id = question.id
         try:
             agent = self._agent_factory(question)
             agent.load()
@@ -77,5 +76,7 @@ class NeedleEvaluator(AnswerEvaluator):
         return Verdict(choice, call.confidence)
 
     def unload(self) -> None:
-        self._agent = None
+        agent, self._agent = self._agent, None
         self._question_id = None
+        if agent is not None:
+            agent.unload()

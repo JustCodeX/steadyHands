@@ -4,6 +4,12 @@ The game itself still runs on command words (`CommandEvent.word`). This
 catalogue is the bridge for a tool-calling model: it hands the model the
 schemas and turns the model's call back into a command word, so
 `GameEngine.on_command` needs no change. See docs/needle-integration.md.
+
+`triggers` are regular expressions the Cactus runtime matches against the
+request (a documented field of its tool schema). Measured on 14 Nov 2026,
+they decide whether Needle picks the right one of several tools without
+parameters: without them every rung tested picked the same tool for almost
+every sentence. They hold domain words, not test sentences.
 """
 from __future__ import annotations
 
@@ -26,6 +32,7 @@ class GameAction:
     description: str
     command: str = ""  # the command word; "" when a parameter supplies it
     parameters: Mapping[str, tuple[str, ...]] = field(default_factory=dict)  # name -> allowed values
+    triggers: tuple[str, ...] = ()  # request regexes for the runtime (ECMAScript syntax)
 
     def command_words(self) -> tuple[str, ...]:
         if self.command:
@@ -37,19 +44,48 @@ class GameAction:
         for name, values in self.parameters.items():
             usable = [v for v in values if allowed is None or v in allowed]
             properties[name] = {"type": "string", "enum": usable}
-        return {
+        schema = {
             "name": self.name,
             "description": self.description,
             "parameters": {"type": "object", "properties": properties, "required": list(properties)},
         }
+        if self.triggers:
+            schema["triggers"] = list(self.triggers)
+        return schema
 
+
+# Treatments the nurse gives on the surgeon's instruction (the vitals monitor).
+TREATMENT_ACTIONS: tuple[GameAction, ...] = (
+    GameAction(
+        "give_oxygen",
+        "Give the patient more oxygen when the oxygen saturation is low or the patient cannot breathe.",
+        command="oxygen",
+        triggers=(r"\b(oxygen|o2|breath\w*|air|airway|blue|cyanos\w*|sats?|saturat\w*|spo2|suffocat\w*|hypox\w*|ventilat\w*)\b",),
+    ),
+    GameAction(
+        "deepen_anaesthesia",
+        "Deepen the anaesthesia when the patient is waking up, moving or feels pain.",
+        command="anaesthesia",
+        triggers=(r"\b(an(a)?esthe\w*|propofol|sedat\w*|wak\w*|awake|mov(e|es|ed|ing)|deeper|sleep\w*|pain|feel\w*|bis|eyes?|twitch\w*)\b",),
+    ),
+    GameAction(
+        "give_adrenaline",
+        "Give adrenaline when the blood pressure is low or falling.",
+        command="adrenaline",
+        triggers=(r"\b(adrenalin\w*|epinephrin\w*|pressure|bp|shock|crash\w*|pulse|systolic|hypotens\w*|faint\w*)\b",),
+    ),
+)
+
+SELECT_INSTRUMENT = GameAction(
+    "select_instrument",
+    "Hand the surgeon an instrument. " + INSTRUMENT_HELP,
+    parameters={"instrument": TOOL_WORDS},
+    triggers=(r"\b(hand|pass|give me|need|instrument|tool|pick|grab|pull|remove|wipe|soak|mop|dab|bleed\w*|vessel|squeeze|pinch|cut|blade|incision|slice|splinter|glass|shard)\b",),
+)
 
 DEFAULT_ACTIONS: tuple[GameAction, ...] = (
-    GameAction(
-        "select_instrument",
-        "Hand the surgeon an instrument. " + INSTRUMENT_HELP,
-        parameters={"instrument": TOOL_WORDS},
-    ),
+    SELECT_INSTRUMENT,
+    *TREATMENT_ACTIONS,
     GameAction("steady", "Precision mode for a few seconds: slower, finer movement.", command="steady"),
     GameAction("light", "Switch on the light to see the dark part of the wound.", command="light"),
     GameAction("cancel", "Undo the last instrument change.", command="cancel"),
@@ -59,6 +95,13 @@ DEFAULT_ACTIONS: tuple[GameAction, ...] = (
     GameAction("resume", "Continue a paused round.", command="continue"),
     GameAction("new_game", "Start a new round.", command="new game"),
 )
+
+# What Needle gets: the treatments only. Whistle and Needle serve the vitals
+# monitor; every older command stays on the Vosk grammar, and neither path
+# fires the other's commands. (Measured 14 Nov 2026: with the instrument tool
+# added, Needle picked the wrong instrument for 16 of 16 clamp and scalpel
+# sentences and false triggers rose. The runtime's docs advise five tools or fewer.)
+MODEL_ACTIONS: tuple[GameAction, ...] = TREATMENT_ACTIONS
 
 
 class ActionCatalog:

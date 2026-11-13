@@ -1,99 +1,110 @@
 #!/usr/bin/env python3
-"""Check a Needle rung against this game's own tools, on the board.
+"""Check Needle rungs against this game's own tools.
 
 Rung quality does not grow steadily with depth and depends on the tools, so a
-rung that passed someone else's cases says little about ours. Every case is a
-sentence without a command phrase (those never reach the model) and the
-command, or quiz option, it should lead to. None means: no tool.
+rung that passed someone else's cases says little about ours. The cases are
+in tests/data/needle_cases.json: sentences without a command phrase (those
+never reach the model) and the command word, or quiz option, each should
+lead to (null: no tool).
 
-Usage, in app/:  python tools/needle_eval.py models/needle3-9L.cact [more.cact ...] [--json]
-Exit code: 0 if every rung given passed every case.
+Needle only decides the vitals-monitor treatments. Pass rule for a rung
+(docs/needle-integration.md): at least 90 % of the treatment sentences right,
+and at most one false trigger over the talk and old-command sentences.
+
+Usage, in app/:  python tools/needle_eval.py models/needle3-9L.cact [more.cact ...] [--json] [--quiz]
+Exit code: 0 if every rung given passed.
 """
 from __future__ import annotations
 
 import argparse
 import json
-import resource
+import re
 import sys
 import time
+from collections import defaultdict
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+APP_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(APP_DIR))
 from trainer.cactus_models.needle_evaluator import NeedleEvaluator  # noqa: E402
 from trainer.cactus_models.needle_interpreter import NeedleInterpreter  # noqa: E402
 from trainer.core.config import load  # noqa: E402
+from trainer.game.actions import MODEL_ACTIONS  # noqa: E402
 from trainer.quiz.question import QuestionBank  # noqa: E402
 
-# (what the player says, the command word it should become)
-COMMAND_CASES: list[tuple[str, str | None]] = [
-    ("i need something to stop the bleeding", "clamp"),
-    ("hand me the thing to grab that splinter", "forceps"),
-    ("wipe the blood away please", "swab"),
-    ("give me the blade", "scalpel"),
-    ("it is too dark in here i can not see", "light"),
-    ("my hand is shaking slow it down", "steady"),
-    ("no that was the wrong one take it back", "cancel"),
-    ("what did you just say", "repeat"),
-    ("what can i say to you", "help"),
-    ("hold on i need a break", "pause"),
-    ("okay lets carry on", "continue"),
-    ("lets begin another round", "new game"),
-    ("did you watch the match last night", None),
-    ("i am so hungry right now", None),
-    ("that was close", None),
-]
-
-# (question id, what the player says, the option it should become)
-ANSWER_CASES: list[tuple[str, str, str | None]] = [
-    ("bleeding_vessel", "the one that squeezes the vessel shut", "clamp"),
-    ("remove_splinter", "the one you pick small things up with", "forceps"),
-    ("clear_view", "something that soaks it up", "swab"),
-    ("first_cut", "the sharp blade", "scalpel"),
-    ("fast_pulse", "that is far too fast", "no"),
-    ("glove_touch", "i would change it first", "no"),
-    ("count_swabs", "of course always", "yes"),
-    ("call_back", "they say it back to confirm", "yes"),
-    ("away_from_heart", "the ones with the pulse in them", "arteries"),
-    ("oxygen", "the one we breathe in", "oxygen"),
-    ("bleeding_vessel", "i have no idea", None),
-    ("fast_pulse", "can you say that again please", None),
-]
+CASES_FILE = APP_DIR / "tests" / "data" / "needle_cases.json"
+MIN_HIT_RATE = 0.9
+MAX_FALSE_TRIGGERS = 1
+TRIGGERS = [re.compile(t, re.IGNORECASE) for a in MODEL_ACTIONS for t in a.triggers]
 
 
-def run(weights: Path, cfg, bank: QuestionBank) -> dict:
-    rss_before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+def load_cases(path: Path = CASES_FILE) -> dict:
+    with open(path) as f:
+        return json.load(f)
+
+
+def has_trigger_word(text: str) -> bool:
+    return any(t.search(text) for t in TRIGGERS)
+
+
+def _median(values: list[float]) -> float:
+    values = sorted(values)
+    return values[len(values) // 2] if values else 0.0
+
+
+def run(weights: Path, cfg, cases: dict, bank: QuestionBank | None, trigger_gate: bool = True) -> dict:
     started = time.perf_counter()
-    interpreter = NeedleInterpreter(cfg.commands, weights, min_confidence=cfg.voice.needle_min_confidence)
+    interpreter = NeedleInterpreter(cfg.treatments, weights, min_confidence=cfg.voice.needle_min_confidence, require_trigger=trigger_gate)
     load_s = time.perf_counter() - started
-    evaluator = NeedleEvaluator(weights, cfg.voice.needle_min_confidence)
     rows, times = [], []
-    for said, expected in COMMAND_CASES:
+    for case in cases["commands"]:
+        said, expected = case["said"], case["expected"]
         t = time.perf_counter()
         match = interpreter.interpret(said)
         times.append(time.perf_counter() - t)
         got = match.word if match else None
-        rows.append({"kind": "command", "said": said, "expected": expected, "got": got, "ok": got == expected})
-    prepare_times = []
-    for question_id, said, expected in ANSWER_CASES:
-        question = bank.get(question_id)
-        t = time.perf_counter()
-        evaluator.prepare(question)
-        prepare_times.append(time.perf_counter() - t)
-        t = time.perf_counter()
-        got = evaluator.evaluate(question, said).choice
-        times.append(time.perf_counter() - t)
-        rows.append({"kind": "answer", "said": said, "expected": expected, "got": got, "ok": got == expected})
+        rows.append({"kind": case["kind"], "said": said, "expected": expected, "got": got, "ok": got == expected, "trigger_word": has_trigger_word(said)})
+    peak_ram_mb = interpreter._agent.peak_ram_mb
+    interpreter.unload()
+
+    if bank is not None:
+        evaluator = NeedleEvaluator(weights, cfg.voice.needle_min_confidence)
+        for case in cases["answers"]:
+            question = bank.get(case["question"])
+            evaluator.prepare(question)
+            t = time.perf_counter()
+            got = evaluator.evaluate(question, case["said"]).choice
+            times.append(time.perf_counter() - t)
+            rows.append({"kind": "answer", "said": case["said"], "expected": case["expected"], "got": got, "ok": got == case["expected"], "trigger_word": None})
+        evaluator.unload()
+
+    tool_rows = [r for r in rows if r["kind"] == "treatment"]
+    talk_rows = [r for r in rows if r["kind"] in ("talk", "status", "old_command")]
+    per_word: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+    for r in tool_rows:
+        per_word[r["expected"]][0] += r["ok"]
+        per_word[r["expected"]][1] += 1
+    hits = sum(r["ok"] for r in tool_rows)
+    false_triggers = sum(not r["ok"] for r in talk_rows)
+    plain = [r for r in tool_rows if not r["trigger_word"]]
     times.sort()
-    rss_after = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return {
         "weights": weights.name,
-        "passed": sum(r["ok"] for r in rows),
-        "cases": len(rows),
-        "median_ms": round(1000 * times[len(times) // 2]),
-        "worst_ms": round(1000 * times[-1]),
+        "trigger_gate": trigger_gate,
+        "tool_hits": hits,
+        "tool_cases": len(tool_rows),
+        "hit_rate": round(hits / len(tool_rows), 3) if tool_rows else 0.0,
+        "false_triggers": false_triggers,
+        "talk_cases": len(talk_rows),
+        "false_triggers_by_kind": {k: sum(not r["ok"] for r in talk_rows if r["kind"] == k) for k in ("talk", "status", "old_command")},
+        "hits_without_trigger_word": f"{sum(r['ok'] for r in plain)}/{len(plain)}",
+        "per_word": {w: f"{ok}/{n}" for w, (ok, n) in sorted(per_word.items())},
+        "answers": f"{sum(r['ok'] for r in rows if r['kind'] == 'answer')}/{sum(r['kind'] == 'answer' for r in rows)}" if bank else None,
+        "median_ms": round(1000 * _median(times)),
+        "worst_ms": round(1000 * times[-1]) if times else 0,
         "load_s": round(load_s, 2),
-        "prepare_question_worst_ms": round(1000 * max(prepare_times)),
-        "rss_added_mb": round((rss_after - rss_before) / 1024),  # ru_maxrss is in kB on Linux
+        "peak_ram_mb": round(peak_ram_mb, 1),
+        "passed": bool(tool_rows) and hits / len(tool_rows) >= MIN_HIT_RATE and false_triggers <= MAX_FALSE_TRIGGERS,
         "failed": [r for r in rows if not r["ok"]],
     }
 
@@ -102,22 +113,31 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("weights", nargs="+", type=Path)
     p.add_argument("--config", help="TOML file with overrides")
+    p.add_argument("--cases", type=Path, default=CASES_FILE)
+    p.add_argument("--quiz", action="store_true", help="also judge the quiz answers (one model per question)")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--quiet", action="store_true", help="no list of failed cases")
+    p.add_argument("--no-trigger-gate", action="store_true", help="let every sentence reach the model, as without voice.needle_require_trigger")
     args = p.parse_args(argv)
     cfg = load(args.config)
-    bank = QuestionBank.load(cfg.quiz.questions_file)
-    results = [run(w, cfg, bank) for w in args.weights]
+    cases = load_cases(args.cases)
+    bank = QuestionBank.load(cfg.quiz.questions_file) if args.quiz else None
+    results = [run(w, cfg, cases, bank, trigger_gate=not args.no_trigger_gate) for w in args.weights]
     if args.json:
         print(json.dumps(results, indent=2))
     else:
         for r in results:
             print(
-                f"{r['weights']}: {r['passed']}/{r['cases']} passed, median {r['median_ms']} ms, worst {r['worst_ms']} ms, "
-                f"load {r['load_s']} s, new question {r['prepare_question_worst_ms']} ms, +{r['rss_added_mb']} MB"
+                f"{r['weights']}{'' if r['trigger_gate'] else ' (no trigger gate)'}: {'PASS' if r['passed'] else 'fail'}  tools {r['tool_hits']}/{r['tool_cases']} ({100 * r['hit_rate']:.0f} %), "
+                f"false triggers {r['false_triggers']}/{r['talk_cases']} {r['false_triggers_by_kind']}, without trigger word {r['hits_without_trigger_word']}"
+                + (f", quiz {r['answers']}" if r["answers"] else "")
+                + f" | median {r['median_ms']} ms, worst {r['worst_ms']} ms, load {r['load_s']} s, peak {r['peak_ram_mb']} MB"
             )
-            for f in r["failed"]:
-                print(f"   {f['kind']}: {f['said']!r} -> {f['got']} (expected {f['expected']})")
-    return 0 if all(r["passed"] == r["cases"] for r in results) else 1
+            print("   " + "  ".join(f"{w} {v}" for w, v in r["per_word"].items()))
+            if not args.quiet:
+                for f in r["failed"]:
+                    print(f"   {f['kind']}: {f['said']!r} -> {f['got']} (expected {f['expected']})")
+    return 0 if all(r["passed"] for r in results) else 1
 
 
 if __name__ == "__main__":

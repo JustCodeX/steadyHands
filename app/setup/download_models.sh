@@ -23,13 +23,18 @@ if [[ ! -f "$MODELS/piper/$VOICE.onnx" ]]; then
   curl -L --fail -o "$MODELS/piper/$VOICE.onnx.json" "$BASE/$VOICE.onnx.json"
 fi
 # Optional: the Cactus models (app/cactus.toml). WITH_CACTUS=1 setup/download_models.sh
+# Needs `pip install -r requirements-cactus.txt` in the app's venv first.
 if [[ "${WITH_CACTUS:-0}" == "1" ]]; then
+  PY="${PYTHON:-$APP_DIR/.venv/bin/python}"
+  # The runtime downloads its engine library on first use; the app runs it
+  # offline (HF_HUB_OFFLINE=1), so fetch the engine for this machine now.
+  CACTUS_TELEMETRY=0 "$PY" -m cactus fetch
   if [[ ! -f "$MODELS/whistle.cact" ]]; then
     echo "Downloading Whistle (about 17 MB)"
     curl -L --fail -o "$MODELS/whistle.cact" "https://huggingface.co/Cactus-Compute/whistle/resolve/main/whistle.cact"
   fi
   if [[ ! -f "$MODELS/needle3-9L.cact" ]]; then
-    # A rung is built from the checkpoint with the training extras, on a
+    # A rung is built from the checkpoint with the training extras (JAX), on a
     # laptop: cactus build needle3.safetensors --layers 9 --out needle3-9L.cact
     echo "needle3-9L.cact is not downloadable: build it (docs/needle-integration.md) and copy it to $MODELS/"
   fi

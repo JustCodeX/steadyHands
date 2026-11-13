@@ -37,7 +37,7 @@ class WhistleRecognizer(SpeechRecognizer):
 
     def _transcribe(self, samples: np.ndarray) -> dict:
         return self._cactus.transcribe(
-            samples.tolist(),
+            samples,  # float32 array; the runtime copies it without a Python list
             language=self.language,
             keywords=self._keywords,
             word_timestamps=True,

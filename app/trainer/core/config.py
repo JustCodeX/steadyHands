@@ -28,6 +28,18 @@ DEFAULT_COMMANDS: dict[str, list[str]] = {
 }
 
 TOOL_WORDS = ("forceps", "swab", "clamp", "scalpel")
+TREATMENT_WORDS = ("oxygen", "anaesthesia", "adrenaline")
+
+# Treatment word -> phrases, for the vitals monitor. Heard by Whistle and
+# decided by Needle, apart from the commands above, which stay on the Vosk
+# grammar: neither path fires the other's words. Only without the Cactus
+# models do these phrases join the Vosk grammar, so the game stays playable
+# by voice (criterion T3).
+DEFAULT_TREATMENTS: dict[str, list[str]] = {
+    "oxygen": ["oxygen"],
+    "anaesthesia": ["anaesthesia", "anesthesia", "propofol"],
+    "adrenaline": ["adrenaline", "epinephrine"],
+}
 
 
 @dataclass
@@ -111,6 +123,9 @@ class VoiceConfig:
     # --- Cactus models (optional; see app/cactus.toml) ---
     needle_weights: str = str(APP_DIR / "models" / "needle3-9L.cact")
     needle_min_confidence: float = 0.1  # the runtime itself holds back calls below 0.1
+    # Needle only runs when a treatment's trigger words are in the sentence:
+    # without this the published rungs call a tool for almost any talk.
+    needle_require_trigger: bool = True
     whistle_weights: str = str(APP_DIR / "models" / "whistle.cact")
     whistle_language: str = "en"  # pinned: auto-detection confuses languages on short segments
 
@@ -178,6 +193,7 @@ class Config:
     system: SystemConfig = field(default_factory=SystemConfig)
     levels_dir: str = str(REPO_DIR / "levels")
     commands: dict[str, list[str]] = field(default_factory=lambda: {k: list(v) for k, v in DEFAULT_COMMANDS.items()})
+    treatments: dict[str, list[str]] = field(default_factory=lambda: {k: list(v) for k, v in DEFAULT_TREATMENTS.items()})
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
