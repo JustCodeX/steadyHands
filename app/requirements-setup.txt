@@ -1,0 +1,2 @@
+# Only for rendering the patient lines once (TtsRenderer). Not needed during play.
+piper-tts>=1.3

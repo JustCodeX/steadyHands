@@ -1,4 +1,1 @@
-"""Core: App, the abstract Service base class, EventBus, event classes, config loading.
-
-See PLAN.md, section "Code design", for the class diagrams.
-"""
+"""App, Service, EventBus, events and config: the backbone every feature plugs into."""

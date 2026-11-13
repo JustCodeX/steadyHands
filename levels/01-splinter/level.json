@@ -1,0 +1,26 @@
+{
+  "name": "Splinter",
+  "time_limit_s": 60,
+  "start": [
+    90,
+    330
+  ],
+  "targets": [
+    {
+      "id": "splinter",
+      "position": [
+        560,
+        160
+      ],
+      "needs": "forceps"
+    },
+    {
+      "id": "shard",
+      "position": [
+        920,
+        300
+      ],
+      "needs": "forceps"
+    }
+  ]
+}

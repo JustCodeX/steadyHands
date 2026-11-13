@@ -1,4 +1,3 @@
-"""Linux side of the surgeon trainer: services that communicate over the EventBus.
+"""Steady Hands: the Linux side of the surgeon trainer on the Arduino UNO Q."""
 
-See PLAN.md, section "Code design", for the class diagrams.
-"""
+__version__ = "0.1.0"

@@ -16,3 +16,8 @@ recordings/
 # Python
 __pycache__/
 .venv/
+
+# Linux app: generated at setup or at run time
+app/assets/clips/*.wav
+app/logs/*.csv
+.pytest_cache/

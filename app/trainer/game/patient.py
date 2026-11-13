@@ -1,0 +1,26 @@
+"""The patient: heart rate rises with every contact and settles again."""
+from __future__ import annotations
+
+
+class Patient:
+    def __init__(self, base_rate: int = 72, per_contact: int = 22, decay_per_s: float = 4.0) -> None:
+        self.base_rate = base_rate
+        self.per_contact = per_contact
+        self.decay_per_s = decay_per_s
+        self.heart_rate = float(base_rate)
+        self.contacts = 0
+
+    def reset(self) -> None:
+        self.heart_rate = float(self.base_rate)
+        self.contacts = 0
+
+    def on_contact(self) -> None:
+        self.contacts += 1
+        self.heart_rate = min(180.0, self.heart_rate + self.per_contact)
+
+    def update(self, dt: float) -> None:
+        if self.heart_rate > self.base_rate:
+            self.heart_rate = max(float(self.base_rate), self.heart_rate - self.decay_per_s * dt)
+
+    def awake(self, max_contacts: int) -> bool:
+        return self.contacts >= max_contacts

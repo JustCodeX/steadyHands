@@ -1,0 +1,9 @@
+[project]
+name = "steadyhands-trainer"
+version = "0.1.0"
+description = "Linux side of the Steady Hands surgeon trainer on the Arduino UNO Q"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

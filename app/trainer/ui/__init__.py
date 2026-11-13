@@ -1,4 +1,1 @@
-"""Display: Renderer, Hud, ResultScreen (pygame, full screen on the HDMI display).
-
-See PLAN.md, section "Code design", for the class diagrams.
-"""
+"""Rendering on the HDMI display with pygame."""
