@@ -38,10 +38,10 @@ A working prototype of a surgeon trainer: you guide a surgical instrument throug
 | ❓ D2 Speech-to-text | Timon decides (model deployment and ASR choice are his area). The code ships `VoskRecognizer` (Vosk small English, vocabulary restricted to our commands: aarch64 wheel, 40 MB model) as the working default; any other engine is a further `SpeechRecognizer` subclass selected in the config (see [Speech pipeline](#speech-pipeline)) |
 | ✅ Purpose | Working prototype of a surgeon trainer, inspired by Dr. Bibber |
 | ✅ Wall feedback | A wall touch plays a buzz in the game (`SoundService`), then the patient's "Ouch!". |
-| ❓ D3 Name | "Steady Hands" is a placeholder |
+| ✅ D3 Name | Steady Hands; the repo is `JustCodeX/steadyHands` (14 Nov) |
 | ❓ D4 Audio for the audience | Headset audio only reaches the person wearing it. Does the display have an audio jack, or can we get a USB speaker? |
-| ❓ D5 License for our code | Must fit the licenses of the models we use (see [Licenses](#licenses)) |
-| ❓ D6 Publishing | Make this repo public at the end, or publish a public copy (see [Publishing](#publishing)) |
+| ✅ D5 License for our code | MIT ([LICENSE](LICENSE)). Models are not in the repo and keep their own licenses (see [Licenses](#licenses)) (14 Nov) |
+| ✅ D6 Publishing | This repo, renamed to `steadyHands` and made public with its history (see [Publishing](#publishing)) (14 Nov) |
 
 ## Gameplay
 
@@ -543,7 +543,7 @@ The event encourages publishing the build as open source. Before we publish, we 
 | Piper (engine) and the chosen voice | ❓ | Check the engine repo and the voice's model card separately |
 | Silero VAD | ❓ | Check the repo |
 | `Arduino_Modulino`, Arduino core | ❓ | Check the repos |
-| Our code (D5) | ❓ | Proposal: MIT or Apache-2.0, if the model licenses allow it |
+| Our code (D5) | MIT | ✅ [LICENSE](LICENSE) |
 
 Models are never committed to the repo (see `.gitignore`). The setup scripts download them, so the repo only needs a license for our own code.
 
@@ -554,7 +554,7 @@ The event encourages publishing the build. By the end of the event, we publish:
 - the build guide: README, [WIRING.md](WIRING.md), and the setup steps,
 - the measured values for energy, latency, and RAM.
 
-❓ D6: make this repo public, or publish a cleaned-up public copy. Before it goes public, the repo must contain no secrets, recordings, or model files.
+✅ D6: this repo is public as [JustCodeX/steadyHands](https://github.com/JustCodeX/steadyHands), history included. Before it went public, the history was checked for secrets, recordings and model files (none found), and the internal session notes were removed. The Project Hub text is in [docs/project-hub.md](docs/project-hub.md).
 
 ## Work split
 
@@ -618,7 +618,7 @@ Sources: the event constraints and our proposed team requirements from the hacka
 | C2 | Voice captured, processed, and synthesised locally; no audio leaves the device or is stored | Audio only in memory; no cloud; no network during play | No audio files on disk after a session; demo with Wi-Fi off | ⬜ |
 | C3 | Energy-aware: measure and minimise | VAD gating, pre-rendered speech, idle mode, no LLM ([Energy](#energy-and-environment)); Whistle runs only for sentences, never for short calls, and Needle only during an alarm with a symptom word | Power per state, energy per round, and the saving from VAD, all measured | ⬜ |
 | C4 | Secure processing and ownership of voice data | No transcripts in logs; no network services; scores for the session only | Log contains only command words and timings | ⬜ |
-| C5 | Open source, published back to the community | `LICENSE`, build guide, public repo or public copy ([Publishing](#publishing)) | Public link (D6) | ⬜ |
+| C5 | Open source, published back to the community | MIT `LICENSE`, build guide, public repo ([Publishing](#publishing)), Project Hub page | Public link: [JustCodeX/steadyHands](https://github.com/JustCodeX/steadyHands); Project Hub page still to be published | 🟡 |
 
 ### User value
 
@@ -651,6 +651,24 @@ Sources: the event constraints and our proposed team requirements from the hacka
 | T3 | Minimum version without an unrestricted LLM | The default configuration uses no language model; patient and nurse lines are scripted; the vitals monitor works with the drug names (standard doses) and keys 5–7. Optional: Needle, which can only call one of three tools with an amount | The app runs every feature with `cactus-compute` not installed. So far: the default config never imports it; without a model, commands and named drugs work in the synthetic run, amounts do not (14 Nov) | 🟡 |
 | T4 | Optional features only after the core works | Core-first rule in the [milestones](#milestones) | Optional work starts only after M1 | ⬜ |
 | T5 | First milestone: spoken input gives a local spoken response on the board; then measure latency | M0 | Test log with latency | ⬜ |
+
+### Organisers' deliverables and judging criteria
+
+Published in the [speech-to-speech README](https://github.com/th-nuernberg/speech-to-speech#expected-deliverables) on 14 November. Where each lives: [README](README.md#hackathon-deliverables).
+
+| ID | Requirement | How we meet it | Evidence for ✅ | Status |
+| --- | --- | --- | --- | --- |
+| H1 | Working prototype with at least one Modulino | Two UNO Q boards with Modulino Buttons, Knob and 2 × Distance | Demo video [pitch/media/demo.mp4](pitch/media/demo.mp4); live demo at the event | 🟡 |
+| H2 | Source code repository | This repo, public, MIT | Public link | 🟡 |
+| H3 | Short technical documentation | [docs/technical-documentation.md](docs/technical-documentation.md) | File in the public repo | 🟡 |
+| H4 | Project on the Arduino Project Hub | Text ready in [docs/project-hub.md](docs/project-hub.md) | Link to the published page | ⬜ |
+| H5 | 5-minute demo presentation | [pitch/](pitch/README.md) with timing and speaker notes | Rehearsed run under 5:00 | 🟡 |
+| H6 | Future roadmap | [ROADMAP.md](ROADMAP.md) | File in the public repo | 🟡 |
+| J1 | Innovation (20 %) | Needle reads drug and dose from free speech on the board; distance-sensor steering with a freeze key | Pitch slides 5–7 | 🟡 |
+| J2 | Technical quality (20 %) | Modular classes behind interfaces; 174 app tests and firmware unit tests; measured numbers | `pytest` green (14 Nov, laptop); [measurements.md](docs/measurements.md) | 🟡 |
+| J3 | Real-world impact (20 %) | Skills-lab training for medical students; offline for hospital data rules | Pitch slide 2; tests with real students ([roadmap](ROADMAP.md)) | 🟡 |
+| J4 | Environmental impact, SCI (20 %) | Design choices in [Energy and environment](#energy-and-environment); SCI method in the [technical documentation](docs/technical-documentation.md#environmental-impact-sci) | SCI per round from measured power (C3) | ⬜ |
+| J5 | Presentation and demo (20 %) | [pitch/](pitch/README.md), video of a live round | Pitch held at the event | ⬜ |
 
 ## Questions for the organisers
 
