@@ -85,10 +85,12 @@ class McuStatus(Event):
 
 @dataclass(kw_only=True)
 class CommandEvent(Event):
-    """A recognised command word with its confidence (0..1)."""
+    """A recognised command word with its confidence (0..1). For the nurse's
+    orders also the amount said (FiO2 %, mg, micrograms); None = standard dose."""
 
     word: str
     confidence: float = 1.0
+    amount: float | None = None
     speech_end_t: float | None = None  # when the speaker stopped, for latency
 
 
@@ -182,8 +184,9 @@ class RoundResult(Event):
     steady_uses: int
     questions_correct: int = 0
     questions_wrong: int = 0
-    treatments_correct: int = 0  # instructions to the nurse that fixed the value in trouble
-    treatments_wrong: int = 0  # wrong or unneeded ones
+    treatments_correct: int = 0  # orders that brought the value in trouble back into its band
+    treatments_wrong: int = 0  # overdoses, wrong drugs and unneeded ones
+    overdoses: int = 0
     crises: int = 0  # a vital stayed critical and cost a life
 
 
@@ -249,6 +252,8 @@ class VitalView:
     unit: str
     status: str  # "normal" | "alarm" | "critical"
     trend: int  # -1, 0, +1
+    dose_card: str = ""  # what 10 units of its drug do, e.g. "10 mg: −6"
+    setting: str = ""  # the oxygen setting on the SpO2 tile, e.g. "FiO2 55%"
 
 
 @dataclass(kw_only=True)

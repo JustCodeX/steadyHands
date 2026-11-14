@@ -25,6 +25,7 @@ class TrainingMetrics:
         self.questions_wrong = 0
         self.treatments_correct = 0
         self.treatments_wrong = 0
+        self.overdoses = 0
         self.crises = 0
         self._jitter_sq_sum = 0.0
         self._jitter_n = 0
@@ -80,5 +81,6 @@ class TrainingMetrics:
             questions_wrong=self.questions_wrong,
             treatments_correct=self.treatments_correct,
             treatments_wrong=self.treatments_wrong,
+            overdoses=self.overdoses,
             crises=self.crises,
         )

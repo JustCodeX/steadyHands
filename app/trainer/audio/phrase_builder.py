@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from ..core.events import RoundResult
-from .lines import explain_id, number_id, nurse_number_id, question_id
+from .lines import DOSE_UNIT, VALUE_UNIT, explain_id, number_id, nurse_number_id, question_id
 
 
 class PhraseBuilder:
@@ -47,24 +47,47 @@ class PhraseBuilder:
         return ["you_can_say"] + [w for w in words if w]
 
     @staticmethod
+    def _number(text: str) -> int | None:
+        try:
+            return round(float(text))
+        except ValueError:
+            return None
+
+    @staticmethod
     def nurse(kind: str, detail: str) -> list[str]:
         """The nurse's lines for the vitals monitor; [] if the event is not hers."""
         parts = detail.split(":")
-        if kind == "vital_alarm":
-            return [f"alarm_{parts[0]}"]
-        if kind == "vital_reminder":
-            value = int(parts[1]) if len(parts) > 1 and parts[1].lstrip("-").isdigit() else None
-            return [f"remind_{parts[0]}"] + ([nurse_number_id(value), f"unit_{parts[0]}"] if value is not None else [])
+        key = parts[0]
+        value = PhraseBuilder._number(parts[1]) if len(parts) > 1 else None
+        if kind in ("vital_reminder", "vital_still"):
+            said = [f"{'remind' if kind == 'vital_reminder' else 'still'}_{key}"]
+            if value is not None:
+                said.append(nurse_number_id(value))
+                if key in VALUE_UNIT:
+                    said.append(VALUE_UNIT[key])
+            return said
+        if kind in ("vital_alarm", "vital_over"):
+            return [f"{'alarm' if kind == 'vital_alarm' else 'over'}_{key}"]
         if kind == "vital_crisis":
             return ["crisis"]
         if kind == "vital_stable":
             return ["stable"]
         if kind == "treatment":
-            treatment, result = parts[0], parts[1] if len(parts) > 1 else ""
+            # detail: drug:result:vital:amount:standard
+            drug, result = parts[0], parts[1] if len(parts) > 1 else ""
+            amount = PhraseBuilder._number(parts[3]) if len(parts) > 3 else None
+            standard = len(parts) > 4 and parts[4] == "standard"
             if result == "already":
                 return ["already"]
-            outcome = {"wrong": ["not_helped"], "unneeded": ["unneeded"]}.get(result, [])
-            return [f"give_{treatment}"] + outcome
+            said = (["standard_dose"] if standard else []) + [f"give_{drug}"]
+            if amount is not None:
+                said += [nurse_number_id(amount), DOSE_UNIT[drug]]
+            outcome = {
+                "wrong": ["not_helped"],
+                "unneeded": ["unneeded"],
+                "overdose": ["too_much_oxygen" if drug == "oxygen" else "overdose"],
+            }.get(result, [])
+            return said + outcome
         if kind in ("pardon_doctor", "you_can_order"):
             return [kind]
         return []

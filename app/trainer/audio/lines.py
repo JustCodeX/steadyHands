@@ -35,7 +35,7 @@ PATIENT_LINES: dict[str, str] = {
     "clamp": "Clamp.",
     "scalpel": "Scalpel.",
     "oxygen": "Oxygen.",  # for "you can say ..."
-    "anaesthesia": "Anaesthesia.",
+    "propofol": "Propofol.",
     "adrenaline": "Adrenaline.",
     "cancel": "Cancelled.",
     "pause": "Pause.",
@@ -66,31 +66,44 @@ NURSE_LINES: dict[str, str] = {
     "alarm_spo2": "Doctor, sats are dropping.",
     "alarm_bis": "Doctor, he is waking up.",
     "alarm_bp": "Doctor, pressure is falling.",
+    "over_bis": "He is too deep now, doctor.",
+    "over_bp": "Pressure is too high now, doctor.",
     "remind_spo2": "Saturation is at",
     "remind_bis": "BIS is at",
     "remind_bp": "Pressure is at",
-    "unit_spo2": "percent.",
-    "unit_bis": "and rising.",
+    "still_spo2": "Saturation still at",
+    "still_bis": "BIS still at",
+    "still_bp": "Pressure still at",
+    "unit_percent": "percent.",
     "unit_bp": "systolic.",
-    # read-back of an instruction, as in the operating room
-    "give_oxygen": "More oxygen.",
-    "give_anaesthesia": "Deepening the anaesthesia.",
-    "give_adrenaline": "Adrenaline is in.",
+    "unit_mg": "milligrams.",
+    "unit_mcg": "micrograms.",
+    # read-back of an order, as in the operating room: drug, amount, unit
+    "give_oxygen": "Oxygen",
+    "give_propofol": "Propofol",
+    "give_adrenaline": "Adrenaline",
+    "standard_dose": "Standard dose.",
     "not_helped": "That did not help, doctor.",
     "unneeded": "That was not needed, doctor.",
-    "already": "Already on it.",
+    "overdose": "That was too much, doctor.",
+    "too_much_oxygen": "That is more oxygen than he needs.",
+    "already": "Already done.",
     "stable": "He is stable again.",
     "crisis": "He is critical! The team steps in.",
     "pardon_doctor": "Pardon, doctor?",
-    "you_can_order": "You can say oxygen, anaesthesia or adrenaline.",
+    "you_can_order": "Order a drug and how much, like propofol 40.",
     # result sentence parts
-    "treat_good": "Every instruction to the nurse was right.",
-    "treat_wrong": "Some instructions to the nurse were wrong.",
+    "treat_good": "Every order to the nurse was right.",
+    "treat_wrong": "Some orders to the nurse were wrong.",
     "crises_one": "One crisis.",
     "crises": "crises.",
 }
 
-MAX_NUMBER = 180
+# The unit the nurse says after a value or an amount.
+VALUE_UNIT = {"spo2": "unit_percent", "bp": "unit_bp"}  # BIS has none
+DOSE_UNIT = {"oxygen": "unit_percent", "propofol": "unit_mg", "adrenaline": "unit_mcg"}
+
+MAX_NUMBER = 200  # propofol goes up to 200 mg
 
 
 def number_id(n: int) -> str:

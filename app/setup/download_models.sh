@@ -41,10 +41,10 @@ if [[ "${WITH_CACTUS:-0}" == "1" ]]; then
     echo "Downloading Whistle (about 17 MB)"
     curl -L --fail -o "$MODELS/whistle.cact" "https://huggingface.co/Cactus-Compute/whistle/resolve/main/whistle.cact"
   fi
-  if [[ ! -f "$MODELS/needle3-9L.cact" ]]; then
+  if [[ ! -f "$MODELS/needle3-12L.cact" ]]; then
     # A rung is built from the checkpoint with the training extras (JAX), on a
-    # laptop: cactus build needle3.safetensors --layers 9 --out needle3-9L.cact
-    echo "needle3-9L.cact is not downloadable: build it (docs/needle-integration.md) and copy it to $MODELS/"
+    # laptop: cactus build needle3.safetensors --layers 12 --out needle3-12L.cact
+    echo "needle3-12L.cact is not downloadable: build it (docs/needle-integration.md) and copy it to $MODELS/"
   fi
 fi
 echo "models ready in $MODELS"

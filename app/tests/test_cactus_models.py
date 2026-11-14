@@ -2,8 +2,9 @@
 
 The stand-in follows cactus-compute 4.2.0 as read from its source: tools are
 JSON schemas, `complete()` returns the proposed calls without executing them,
-a call below confidence 0.1 lands in "suppressed_calls", `reset()` must come
-before every independent text, and `close()` ends the worker process. The
+a call below confidence 0.1 lands in "suppressed_calls", a number argument
+that is not in the text is listed in validation.ungrounded, `reset()` must
+come before every independent text, and `close()` ends the worker process. The
 real runtime is covered by tests/test_cactus_real.py.
 """
 import json
@@ -17,13 +18,14 @@ import pytest
 from trainer.cactus_models import needle_agent, whistle_recognizer
 from trainer.cactus_models.needle_agent import NeedleAgent, tool_schema
 from trainer.cactus_models.needle_evaluator import NeedleEvaluator
-from trainer.cactus_models.needle_interpreter import NeedleInterpreter
+from trainer.cactus_models.needle_orders import NeedleOrders
 from trainer.cactus_models.runtime import load_cactus
 from trainer.cactus_models.whistle_recognizer import WhistleRecognizer
 from trainer.core.config import DEFAULT_COMMANDS, DEFAULT_TREATMENTS, QuizConfig, VoiceConfig
 from trainer.game.actions import MODEL_ACTIONS, ActionCatalog
 from trainer.quiz import KeywordEvaluator, QuestionBank
 from trainer.voice.command_matcher import CommandMatcher
+from trainer.voice.named_orders import NamedOrders
 from trainer.voice.recognizer import EnsembleRecognizer, NullRecognizer
 from trainer.voice.voice_service import (
     build_answer_recognizer,
@@ -58,13 +60,18 @@ class FakeAgent:
         planned = self.script.get(text, [])
         if isinstance(planned, Exception):
             raise planned
-        calls, confidence = [], 0.7
+        calls, confidence, ungrounded = [], 0.7, []
         for name, arguments, conf in planned:
             tool = self.tools[name]
             properties = tool["parameters"]["properties"]
             assert set(arguments) == set(properties)
             for key, value in arguments.items():
-                assert value in properties[key]["enum"], f"{value!r} is not allowed for {name}.{key}"
+                if properties[key]["type"] == "integer":
+                    assert properties[key]["minimum"] <= value <= properties[key]["maximum"]
+                    if str(value) not in text:  # the runtime's grounding check
+                        ungrounded.append(f"{name}.{key}")
+                else:
+                    assert value in properties[key]["enum"], f"{value!r} is not allowed for {name}.{key}"
             calls.append({"name": name, "arguments": arguments})
             confidence = conf
         gated = confidence is not None and confidence < 0.1  # the runtime's own gate: reported, not proposed
@@ -73,6 +80,7 @@ class FakeAgent:
             "function_calls": [] if gated else calls,
             "suppressed_calls": calls if gated else [],
             "confidence": confidence,
+            "validation": {"ungrounded": ungrounded, "negation": False},
         }
 
 
@@ -185,47 +193,59 @@ def test_agent_gives_nothing_when_the_model_is_unsure_or_wants_two_things(monkey
     assert agent.call("twice") is None  # our own, stricter gate
 
 
+def test_calls_keep_grounded_orders_and_the_last_correction(monkeypatch, weights):
+    fake = use(monkeypatch, FakeCactus({
+        "propofol 20 and oxygen 60": [("give_propofol", {"milligrams": 20}, 0.8), ("set_oxygen", {"percent": 60}, 0.8)],
+        "propofol 20 no wait 30": [("give_propofol", {"milligrams": 20}, 0.6), ("give_propofol", {"milligrams": 30}, 0.6)],
+        "propofol": [("give_propofol", {"milligrams": 50}, 0.4)],  # an invented amount
+        "held back": [("give_propofol", {"milligrams": 5}, 0.05)],
+    }))
+    agent = NeedleAgent(weights, "s", ActionCatalog(MODEL_ACTIONS).schemas())
+    assert [(c.name, c.arguments) for c in agent.calls("propofol 20 and oxygen 60")] == [
+        ("give_propofol", {"milligrams": 20}), ("set_oxygen", {"percent": 60})]
+    assert [c.arguments for c in agent.calls("propofol 20 no wait 30")] == [{"milligrams": 30}]
+    assert agent.calls("propofol") == []  # ungrounded: not in the text
+    assert agent.calls("held back") == [] and agent.calls("nice day") == []
+    assert len(fake.agents) == 1
+
+
 def test_agent_needs_its_weights(monkeypatch, tmp_path):
     use(monkeypatch, FakeCactus())
     with pytest.raises(FileNotFoundError):
         NeedleAgent(tmp_path / "missing.cact", "s", lambda record: []).load()
 
 
-# --- NeedleInterpreter -------------------------------------------------------------
+# --- NeedleOrders -------------------------------------------------------------------
 
 
-def test_interpreter_asks_the_model_only_when_no_treatment_phrase_was_said(monkeypatch, weights):
+def test_orders_need_a_drug_named_and_read_its_amount(monkeypatch, weights):
     script = {
-        "he can't breathe": [("give_oxygen", {}, 0.8)],
-        "the patient is waking up": [("deepen_anaesthesia", {}, 0.6)],
-        "his heart is barely pumping": RuntimeError("engine fell over"),
+        "give him 30 milligrams of propofol.": [("give_propofol", {"milligrams": 30}, 0.8)],
+        "propofol 40 and oxygen to 70.": [("give_propofol", {"milligrams": 40}, 0.8), ("set_oxygen", {"percent": 70}, 0.8)],
+        "more propofol.": [("give_propofol", {"milligrams": 50}, 0.3)],  # the model invents an amount
+        "adrenaline 300.": [("give_adrenaline", {"micrograms": 100}, 0.7)],  # clamped by the schema; not in the text
+        "epinephrine 10 now.": RuntimeError("engine fell over"),
     }
     fake = use(monkeypatch, FakeCactus(script))
-    interpreter = NeedleInterpreter(DEFAULT_TREATMENTS, weights)
+    orders = NeedleOrders(DEFAULT_TREATMENTS, weights)
     agent = fake.agents[0]
-    assert sorted(agent.tools) == sorted(a.name for a in MODEL_ACTIONS)  # the treatments, nothing else
+    assert sorted(agent.tools) == sorted(a.name for a in MODEL_ACTIONS)  # the three drugs, nothing else
+    assert agent.tools["give_propofol"]["parameters"]["properties"]["milligrams"]["type"] == "integer"
 
-    assert interpreter.interpret("oxygen").word == "oxygen"
-    assert interpreter.interpret("give him some adrenaline now").score == 1.0  # the phrase is in the sentence
-    assert agent.heard == []  # neither needed the model
+    def said(text):
+        return [(m.word, m.amount) for m in orders.orders(text)]
 
-    hit = interpreter.interpret("he can't breathe")
-    assert (hit.word, hit.score) == ("oxygen", 0.8)
-    assert interpreter.interpret("the patient is waking up").word == "anaesthesia"
-    assert interpreter.interpret("the patient is waking up", allowed=["oxygen"]) is None
-    # talk and older commands are not treatments, and without a trigger word the model does not even run
+    assert said("give him 30 milligrams of propofol") == [("propofol", 30.0)]
+    assert said("propofol 40 and oxygen to 70") == [("propofol", 40.0), ("oxygen", 70.0)]
+    assert said("more propofol") == [("propofol", None)]  # named, no usable amount: standard dose
+    assert said("adrenaline 300") == [("adrenaline", None)]
+    assert said("epinephrine 10 now") == [("adrenaline", None)]  # a failing model: standard dose
     heard = len(agent.heard)
-    assert interpreter.interpret("did you see the game last night") is None
-    assert interpreter.interpret("give me the clamp") is None
-    assert len(agent.heard) == heard
-    interpreter.require_trigger = False
-    assert interpreter.interpret("did you see the game last night") is None  # the model said: no tool
-    assert len(agent.heard) == heard + 1
-    interpreter.require_trigger = True
-    # a failing model must not stop the game: no guess becomes a treatment
-    assert interpreter.interpret("his heart is barely pumping") is None
-    assert interpreter.interpret("") is None
-    assert interpreter.phrases() == CommandMatcher(DEFAULT_TREATMENTS).phrases()
+    assert said("his sats look good now") == [] and said("give me the clamp") == [] and said("") == []
+    assert len(agent.heard) == heard  # no drug named: the model does not run
+    assert orders.phrases() == ["oxygen", "propofol", "adrenaline", "epinephrine"]
+    assert NeedleOrders.sentence("push 10 micrograms of adrenaline") == "push 10 micrograms of adrenaline."
+    assert NeedleOrders.sentence("Oxygen 60!") == "Oxygen 60!"
 
 
 # --- NeedleEvaluator ---------------------------------------------------------------
@@ -325,13 +345,13 @@ def test_config_selects_needle_for_treatments_and_falls_back_without_it(monkeypa
     use(monkeypatch, FakeCactus())
     with_needle = VoiceConfig(treatment_interpreter="needle", evaluator="needle", needle_weights=str(weights))
     treatments = build_treatment_interpreter(with_needle, DEFAULT_TREATMENTS)
-    assert isinstance(treatments, NeedleInterpreter) and treatments.require_trigger
+    assert isinstance(treatments, NeedleOrders) and treatments.require_trigger
     assert isinstance(build_evaluator(with_needle), NeedleEvaluator)
     missing = VoiceConfig(treatment_interpreter="needle", evaluator="needle", needle_weights=str(tmp_path / "missing.cact"))
     with caplog.at_level("ERROR"):
         fallback = build_treatment_interpreter(missing, DEFAULT_TREATMENTS)
         assert type(build_evaluator(missing)) is KeywordEvaluator
-    assert isinstance(fallback, CommandMatcher) and fallback.interpret("give him oxygen").word == "oxygen"
+    assert isinstance(fallback, NamedOrders) and [(m.word, m.amount) for m in fallback.orders("give him oxygen")] == [("oxygen", None)]
     assert caplog.text.count("Needle unavailable") == 2
 
 
@@ -367,26 +387,33 @@ def test_config_selects_whistle_for_answers_and_for_sentences(monkeypatch, weigh
 # --- the board check --------------------------------------------------------------
 
 
-def test_eval_cases_fit_the_game_and_never_contain_a_phrase_the_keywords_catch(monkeypatch, weights, capsys):
+def test_eval_cases_fit_the_game_and_never_contain_a_command_phrase(monkeypatch, weights, capsys):
     sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1] / "tools"))
     import needle_eval
 
     cases = needle_eval.load_cases()
-    every_phrase = {**DEFAULT_COMMANDS, **DEFAULT_TREATMENTS}
-    matcher, keywords, catalog = CommandMatcher(every_phrase), KeywordEvaluator(), ActionCatalog(MODEL_ACTIONS)
+    keywords = KeywordEvaluator()
+    named = NamedOrders(DEFAULT_TREATMENTS)
+    tool_of = {a.command: a for a in MODEL_ACTIONS}
     script = {}
-    for case in cases["commands"]:
-        said, expected = case["said"], case["expected"]
-        assert case["kind"] in ("treatment", "talk", "status", "old_command")
-        assert (expected in DEFAULT_TREATMENTS) if case["kind"] == "treatment" else expected is None
-        hit = matcher.interpret(said)
-        assert hit is None or hit.score < 1.0, f"{said!r} contains a phrase: Vosk or the keywords catch it, the model never sees it"
-        if expected is not None:
-            action = next(a for a in MODEL_ACTIONS if expected in a.command_words())
-            script[said] = [(action.name, {}, 0.8)]
-            assert catalog.command_word(action.name) == expected
-    assert sum(c["expected"] is None for c in cases["commands"]) >= 20  # enough talk to count false triggers
-    assert sum(not needle_eval.has_trigger_word(c["said"]) for c in cases["commands"] if c["expected"]) >= 5
+    for case in cases["orders"]:
+        said, expected, kind = case["said"], case["expected"], case["kind"]
+        assert kind in ("order", "named", "talk", "named_talk")
+        assert all(word in DEFAULT_TREATMENTS for word, _ in expected)
+        if kind in ("talk",):
+            assert not expected and not named.orders(said)
+        if kind == "named":
+            assert all(amount is None for _, amount in expected)
+        if kind == "order":
+            assert all(amount is not None for _, amount in expected)
+            planned = []
+            for word, amount in expected:
+                action = tool_of[word]
+                planned.append((action.name, {action.amount.name: int(amount)}, 0.8))
+            # numbers said in words ("fifty") are not grounded by the stand-in's digit check: leave them out
+            if all(str(int(amount)) in said for _, amount in expected):
+                script[said] = planned
+    assert sum(c["kind"] == "talk" for c in cases["orders"]) >= 10  # enough talk to count false orders
     for case in cases["answers"]:
         question = BANK.get(case["question"])
         assert question is not None and (case["expected"] is None or case["expected"] in question.options)
@@ -394,8 +421,12 @@ def test_eval_cases_fit_the_game_and_never_contain_a_phrase_the_keywords_catch(m
         if case["expected"] is not None:
             script[case["said"]] = [("answer", {"choice": case["expected"]}, 0.8)]
     use(monkeypatch, FakeCactus(script))
-    assert needle_eval.main([str(weights), "--quiz", "--no-trigger-gate"]) == 0  # a model that answers as hoped passes
-    out = capsys.readouterr().out
-    assert "PASS" in out and f"quiz {len(cases['answers'])}/{len(cases['answers'])}" in out
+    needle_eval.main([str(weights), "--quiz", "--json"])
+    import json as _json
+
+    result = _json.loads(capsys.readouterr().out)[0]
+    assert result["false_orders"] == 0 and result["named"] == "6/6"
+    assert result["answers"] == f"{len(cases['answers'])}/{len(cases['answers'])}"
+    assert result["orders"] == f"{len(script) - sum(c['expected'] is not None for c in cases['answers'])}/{sum(c['kind'] == 'order' for c in cases['orders'])}"
     use(monkeypatch, FakeCactus({}))
-    assert needle_eval.main([str(weights), "--json"]) == 1  # one that never calls a tool does not
+    assert needle_eval.main([str(weights), "--json"]) == 1  # one that never calls a tool does not pass

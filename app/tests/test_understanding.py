@@ -1,5 +1,5 @@
-"""The two speech paths: older commands on the Vosk grammar, treatments through
-Whistle and Needle, and neither firing the other's words."""
+"""The two speech paths: older commands on the Vosk grammar, the nurse's orders
+(drug and amount) through Whistle and Needle, and neither firing the other's words."""
 import json
 import random
 
@@ -10,7 +10,8 @@ from trainer.game.collision_map import CollisionMap
 from trainer.game.engine import GameEngine
 from trainer.game.level import Level, LevelCatalog
 from trainer.voice.command_matcher import CommandMatcher
-from trainer.voice.interpreter import CommandInterpreter, Match
+from trainer.voice.interpreter import Match, OrderInterpreter
+from trainer.voice.named_orders import NamedOrders
 from trainer.voice.recognizer import SpeechRecognizer, Transcript
 from trainer.voice.understanding import CommandUnderstanding
 from trainer.voice.vad import Segmenter
@@ -31,24 +32,25 @@ class Scripted(SpeechRecognizer):
         return Transcript(self.text, self.conf)
 
 
-class FakeNeedle(CommandInterpreter):
-    """Phrases first, then a scripted 'model'."""
+class FakeNeedle(OrderInterpreter):
+    """A drug must be named; a scripted 'model' reads the amounts."""
 
     def __init__(self, script):
         self.script = script
         self.asked = []
-        self.phrases_matcher = CommandMatcher(DEFAULT_TREATMENTS)
+        self.names = NamedOrders(DEFAULT_TREATMENTS)
 
-    def interpret(self, text, allowed=None):
-        hit = self.phrases_matcher.interpret(text)
-        if hit is not None and hit.score == 1.0:
-            return hit
+    def orders(self, text):
+        named = self.names.orders(text)
+        if not named:
+            return []
         self.asked.append(text)
-        word = self.script.get(text)
-        return Match(word=word, score=0.7) if word else None
+        planned = [Match(word=w, score=0.7, amount=a) for w, a in self.script.get(text, [])]
+        given = {m.word for m in planned}
+        return planned + [n for n in named if n.word not in given]
 
     def phrases(self):
-        return self.phrases_matcher.phrases()
+        return self.names.phrases()
 
 
 def understanding(grammar_text, grammar_conf=0.9, sentence_text="", sentence_conf=0.95, script=None, sentence=True):
@@ -59,6 +61,10 @@ def understanding(grammar_text, grammar_conf=0.9, sentence_text="", sentence_con
     return u, vosk, whistle, needle
 
 
+def orders(got):
+    return [(m.word, m.amount) for m in got.orders]
+
+
 def test_a_short_call_takes_the_fast_path_and_whistle_never_runs():
     u, vosk, whistle, needle = understanding("clamp", sentence_text="clamp")
     got = u.finish(0.6, expecting=True)
@@ -66,28 +72,35 @@ def test_a_short_call_takes_the_fast_path_and_whistle_never_runs():
     assert whistle.finished == 0 and needle.asked == []
 
 
-def test_during_an_alarm_a_sentence_becomes_a_treatment_even_if_the_grammar_forced_a_word():
-    u, vosk, whistle, needle = understanding("steady", sentence_text="he can't breathe", script={"he can't breathe": "oxygen"})
+def test_an_order_wins_even_if_the_grammar_forced_a_word():
+    said = "give him 30 milligrams of propofol"
+    u, vosk, whistle, needle = understanding("steady", sentence_text=said, script={said: [("propofol", 30.0)]})
     got = u.finish(1.8, expecting=True)
-    assert (got.kind, got.word) == ("treatment", "oxygen") and got.sentence_ran
-    assert needle.asked == ["he can't breathe"]
+    assert got.kind == "treatment" and orders(got) == [("propofol", 30.0)] and got.sentence_ran
 
 
-def test_outside_an_alarm_needle_is_not_asked_and_the_grammar_stands():
-    u, vosk, whistle, needle = understanding("steady", sentence_text="he can't breathe", script={"he can't breathe": "oxygen"})
-    got = u.finish(1.8, expecting=False)
-    assert (got.kind, got.word) == ("command", "steady") and needle.asked == []
-    u, *_ = understanding("", sentence_text="his sats look good now", script={"his sats look good now": "oxygen"})
-    assert u.finish(1.5, expecting=False).kind == "ignored"  # status talk outside an alarm: nothing
+def test_orders_count_at_any_time_because_the_drug_is_named():
+    said = "oxygen 60 and 10 micrograms adrenaline"
+    u, vosk, whistle, needle = understanding("", sentence_text=said, script={said: [("oxygen", 60.0), ("adrenaline", 10.0)]})
+    got = u.finish(2.0, expecting=False)
+    assert orders(got) == [("oxygen", 60.0), ("adrenaline", 10.0)]
 
 
-def test_a_treatment_said_by_name_counts_at_any_time():
-    u, vosk, whistle, needle = understanding("", sentence_text="give him some adrenaline now")
+def test_a_drug_named_without_an_amount_is_the_standard_dose():
+    u, *_ = understanding("", sentence_text="give him some adrenaline now")
     got = u.finish(1.6, expecting=False)
-    assert (got.kind, got.word, got.confidence) == ("treatment", "adrenaline", 1.0) and needle.asked == []
+    assert orders(got) == [("adrenaline", None)]
 
 
-def test_a_sentence_without_a_treatment_is_unclear_only_while_the_nurse_waits():
+def test_talk_without_a_drug_never_reaches_the_model():
+    u, vosk, whistle, needle = understanding("steady", sentence_text="his sats look good now")
+    got = u.finish(1.8, expecting=False)
+    assert (got.kind, got.word) == ("command", "steady") and needle.asked == []  # the grammar's word stands, as before
+    u, *_ = understanding("", sentence_text="his sats look good now")
+    assert u.finish(1.5, expecting=False).kind == "ignored"
+
+
+def test_a_sentence_without_a_drug_is_unclear_only_while_the_nurse_waits():
     u, *_ = understanding("", sentence_text="what a lovely day")
     got = u.finish(1.5, expecting=True)
     assert (got.kind, got.reason) == ("unclear", "no_instruction")
@@ -95,8 +108,8 @@ def test_a_sentence_without_a_treatment_is_unclear_only_while_the_nurse_waits():
     assert u.finish(1.5, expecting=False).kind == "ignored"
 
 
-def test_whistle_unsure_means_no_treatment():
-    u, vosk, whistle, needle = understanding("", sentence_text="give him oxygen", sentence_conf=0.3)
+def test_whistle_unsure_means_no_order():
+    u, vosk, whistle, needle = understanding("", sentence_text="oxygen 60", sentence_conf=0.3)
     assert u.finish(1.5, expecting=False).kind == "ignored"
 
 
@@ -106,13 +119,14 @@ def test_an_older_command_in_a_sentence_still_works():
     assert (got.kind, got.word) == ("command", "clamp") and got.sentence_ran  # the grammar's word stands
 
 
-def test_without_a_sentence_path_the_treatments_join_the_grammar():
+def test_without_a_sentence_path_the_drugs_join_the_grammar_at_the_standard_dose():
     phrases = command_phrases(DEFAULT_COMMANDS, DEFAULT_TREATMENTS, sentence_path=False)
-    assert "oxygen" in phrases and "clamp" in phrases
-    assert "oxygen" not in command_phrases(DEFAULT_COMMANDS, DEFAULT_TREATMENTS, sentence_path=True)
-    vosk = Scripted("oxygen", 0.9)
+    assert "propofol" in phrases and "clamp" in phrases
+    assert "propofol" not in command_phrases(DEFAULT_COMMANDS, DEFAULT_TREATMENTS, sentence_path=True)
+    vosk = Scripted("propofol", 0.9)
     u = CommandUnderstanding(vosk, CommandMatcher(phrases), 0.6, DEFAULT_TREATMENTS)
-    assert (u.finish(0.7, expecting=True).kind, u.finish(0.7, expecting=True).word) == ("command", "oxygen")
+    got = u.finish(0.7, expecting=True)
+    assert (got.kind, got.word) == ("command", "propofol")  # the engine gives the standard dose
     low = CommandUnderstanding(Scripted("clamp", 0.3), CommandMatcher(phrases), 0.6, DEFAULT_TREATMENTS)
     assert low.finish(0.5, expecting=False).reason == "low_confidence"
 
@@ -139,9 +153,10 @@ class Silent:
         return None
 
 
-def test_voice_service_publishes_treatments_and_pardon_while_the_window_is_open():
+def test_voice_service_publishes_orders_with_amounts_and_pardon_while_the_window_is_open():
     bus = EventBus()
-    whistle = Scripted("he can't breathe")
+    said = "propofol 40 and oxygen to 70"
+    whistle = Scripted(said)
     svc = VoiceService(
         bus,
         VoiceConfig(),
@@ -150,22 +165,24 @@ def test_voice_service_publishes_treatments_and_pardon_while_the_window_is_open(
         audio=Silent(),
         treatments=DEFAULT_TREATMENTS,
         sentence_recognizer=whistle,
-        treatment_interpreter=FakeNeedle({"he can't breathe": "oxygen"}),
+        treatment_interpreter=FakeNeedle({said: [("propofol", 40.0), ("oxygen", 70.0)]}),
     )
     seen = []
     bus.subscribe(CommandEvent, seen.append)
     bus.subscribe(MisheardEvent, seen.append)
     svc.handle_segment(1.0, 1.6)
     bus.dispatch()
-    assert seen == []  # no alarm: the model is not asked, the sentence is ignored
+    assert [(e.word, e.amount) for e in seen] == [("propofol", 40.0), ("oxygen", 70.0)]  # two orders, two events
+    seen.clear()
+    whistle.text = "hmm what was that"
+    svc.handle_segment(2.0, 1.6)
+    bus.dispatch()
+    assert seen == []  # no alarm: talk is ignored
     bus.publish(InstructionWindow(open=True))
     bus.dispatch()
-    svc.handle_segment(2.0, 1.6)
-    whistle.text = "hmm what was that"
     svc.handle_segment(3.0, 1.6)
     bus.dispatch()
-    assert [type(e).__name__ for e in seen] == ["CommandEvent", "MisheardEvent"]
-    assert seen[0].word == "oxygen" and seen[1].reason == "no_instruction"
+    assert [type(e).__name__ for e in seen] == ["MisheardEvent"] and seen[0].reason == "no_instruction"
 
 
 # --- adaptive end of a segment ------------------------------------------------------------
@@ -228,7 +245,7 @@ def test_engine_opens_the_window_and_the_nurse_asks_again_then_names_the_options
         bus.dispatch()
     nurse = [e.kind for e in seen if isinstance(e, GameEvent) and e.kind in ("pardon_doctor", "you_can_order")]
     assert nurse == ["pardon_doctor", "you_can_order"]
-    bus.publish(CommandEvent(word="oxygen", confidence=0.8))
+    bus.publish(CommandEvent(word="oxygen", confidence=0.8, amount=100))
     bus.dispatch()
     eng.tick(0.1)
     bus.dispatch()

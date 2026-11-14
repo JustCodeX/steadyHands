@@ -1,485 +1,527 @@
 {
- "about": "Free sentences for Needle, written 14 Nov 2026 (one author, so they share a style; the test with real speakers on the board counts). Needle only decides the vitals-monitor treatments; every older command stays on the Vosk grammar. None of the sentences contains a command or treatment phrase, so each one reaches the model. kind 'treatment': 'expected' is the treatment word. kind 'talk': conversation that must not trigger a treatment. kind 'status': a report that the patient is fine, with the same medical words as an alarm; it must not trigger a treatment. kind 'old_command': an older command in free words (Vosk's job); it must not trigger a treatment either. Some treatment sentences avoid every trigger word on purpose (tools/needle_eval.py reports them apart).",
- "commands": [
-  {
-   "said": "he can't breathe, do something",
-   "expected": "oxygen",
-   "kind": "treatment"
-  },
-  {
-   "said": "his sats are dropping",
-   "expected": "oxygen",
-   "kind": "treatment"
-  },
-  {
-   "said": "he's turning blue",
-   "expected": "oxygen",
-   "kind": "treatment"
-  },
-  {
-   "said": "turn up the gas flow, he needs air",
-   "expected": "oxygen",
-   "kind": "treatment"
-  },
-  {
-   "said": "saturation is down to eighty five",
-   "expected": "oxygen",
-   "kind": "treatment"
-  },
-  {
-   "said": "he's struggling to breathe",
-   "expected": "oxygen",
-   "kind": "treatment"
-  },
-  {
-   "said": "increase the O2 please",
-   "expected": "oxygen",
-   "kind": "treatment"
-  },
-  {
-   "said": "his lips are going purple",
-   "expected": "oxygen",
-   "kind": "treatment"
-  },
-  {
-   "said": "he's gasping",
-   "expected": "oxygen",
-   "kind": "treatment"
-  },
-  {
-   "said": "the pulse oximeter says eighty eight percent",
-   "expected": "oxygen",
-   "kind": "treatment"
-  },
-  {
-   "said": "he needs more air",
-   "expected": "oxygen",
-   "kind": "treatment"
-  },
-  {
-   "said": "bag him, he's hypoxic",
-   "expected": "oxygen",
-   "kind": "treatment"
-  },
-  {
-   "said": "his breathing is very shallow",
-   "expected": "oxygen",
-   "kind": "treatment"
-  },
-  {
-   "said": "turn up the flow on the mask",
-   "expected": "oxygen",
-   "kind": "treatment"
-  },
-  {
-   "said": "he's wheezing and grey",
-   "expected": "oxygen",
-   "kind": "treatment"
-  },
-  {
-   "said": "the patient is waking up",
-   "expected": "anaesthesia",
-   "kind": "treatment"
-  },
-  {
-   "said": "he's moving, put him deeper",
-   "expected": "anaesthesia",
-   "kind": "treatment"
-  },
-  {
-   "said": "he can feel that, give him more sleep medicine",
-   "expected": "anaesthesia",
-   "kind": "treatment"
-  },
-  {
-   "said": "his eyes are opening",
-   "expected": "anaesthesia",
-   "kind": "treatment"
-  },
-  {
-   "said": "BIS is going up",
-   "expected": "anaesthesia",
-   "kind": "treatment"
-  },
-  {
-   "said": "he's coming round",
-   "expected": "anaesthesia",
-   "kind": "treatment"
-  },
-  {
-   "said": "he's grimacing",
-   "expected": "anaesthesia",
-   "kind": "treatment"
-  },
-  {
-   "said": "he's fighting the tube",
-   "expected": "anaesthesia",
-   "kind": "treatment"
-  },
-  {
-   "said": "put him back under",
-   "expected": "anaesthesia",
-   "kind": "treatment"
-  },
-  {
-   "said": "he's not deep enough",
-   "expected": "anaesthesia",
-   "kind": "treatment"
-  },
-  {
-   "said": "he's reacting to the pain",
-   "expected": "anaesthesia",
-   "kind": "treatment"
-  },
-  {
-   "said": "more sedation please",
-   "expected": "anaesthesia",
-   "kind": "treatment"
-  },
-  {
-   "said": "his hand just twitched",
-   "expected": "anaesthesia",
-   "kind": "treatment"
-  },
-  {
-   "said": "keep him asleep",
-   "expected": "anaesthesia",
-   "kind": "treatment"
-  },
-  {
-   "said": "he's trying to sit up",
-   "expected": "anaesthesia",
-   "kind": "treatment"
-  },
-  {
-   "said": "pressure is dropping fast",
-   "expected": "adrenaline",
-   "kind": "treatment"
-  },
-  {
-   "said": "he's crashing, get his pressure up",
-   "expected": "adrenaline",
-   "kind": "treatment"
-  },
-  {
-   "said": "the pulse is very weak",
-   "expected": "adrenaline",
-   "kind": "treatment"
-  },
-  {
-   "said": "systolic is seventy",
-   "expected": "adrenaline",
-   "kind": "treatment"
-  },
-  {
-   "said": "he's going into shock",
-   "expected": "adrenaline",
-   "kind": "treatment"
-  },
-  {
-   "said": "his blood pressure is tanking",
-   "expected": "adrenaline",
-   "kind": "treatment"
-  },
-  {
-   "said": "BP is eighty over forty",
-   "expected": "adrenaline",
-   "kind": "treatment"
-  },
-  {
-   "said": "we're losing his pressure",
-   "expected": "adrenaline",
-   "kind": "treatment"
-  },
-  {
-   "said": "give him a vasopressor",
-   "expected": "adrenaline",
-   "kind": "treatment"
-  },
-  {
-   "said": "he's hypotensive",
-   "expected": "adrenaline",
-   "kind": "treatment"
-  },
-  {
-   "said": "his pressure is in the sixties",
-   "expected": "adrenaline",
-   "kind": "treatment"
-  },
-  {
-   "said": "he's pale and clammy",
-   "expected": "adrenaline",
-   "kind": "treatment"
-  },
-  {
-   "said": "the arterial line reads sixty over thirty",
-   "expected": "adrenaline",
-   "kind": "treatment"
-  },
-  {
-   "said": "push something for his pressure",
-   "expected": "adrenaline",
-   "kind": "treatment"
-  },
-  {
-   "said": "his heart is barely pumping",
-   "expected": "adrenaline",
-   "kind": "treatment"
-  },
-  {
-   "said": "nice weather today",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "did you watch the game last night",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "good job everyone",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "I am so hungry right now",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "that was close",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "how long have we been in here",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "is this your first operation",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "what time is it",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "I think we're nearly done",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "the music in here is nice",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "can someone scratch my nose",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "my back hurts from standing",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "tell me about your weekend",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "I love this job",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "that looks good so far",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "the patient looks stable",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "everything is fine for now",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "let's be careful here",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "what's for lunch",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "who is on call tonight",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "this game is fun",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "I'm nervous",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "thank you nurse",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "okay",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "hmm let me think",
-   "expected": null,
-   "kind": "talk"
-  },
-  {
-   "said": "hand me the thing to grab that splinter",
-   "expected": null,
-   "kind": "old_command"
-  },
-  {
-   "said": "wipe the blood away please",
-   "expected": null,
-   "kind": "old_command"
-  },
-  {
-   "said": "I need something to stop the bleeding",
-   "expected": null,
-   "kind": "old_command"
-  },
-  {
-   "said": "give me the blade",
-   "expected": null,
-   "kind": "old_command"
-  },
-  {
-   "said": "squeeze that vessel shut",
-   "expected": null,
-   "kind": "old_command"
-  },
-  {
-   "said": "pass me something to cut with",
-   "expected": null,
-   "kind": "old_command"
-  },
-  {
-   "said": "soak up that blood",
-   "expected": null,
-   "kind": "old_command"
-  },
-  {
-   "said": "it is too dark in here I can not see",
-   "expected": null,
-   "kind": "old_command"
-  },
-  {
-   "said": "my hand is shaking, slow it down",
-   "expected": null,
-   "kind": "old_command"
-  },
-  {
-   "said": "no, that was the wrong one, take it back",
-   "expected": null,
-   "kind": "old_command"
-  },
-  {
-   "said": "what did you just say",
-   "expected": null,
-   "kind": "old_command"
-  },
-  {
-   "said": "hold on, I need a break",
-   "expected": null,
-   "kind": "old_command"
-  },
-  {
-   "said": "okay, let's carry on",
-   "expected": null,
-   "kind": "old_command"
-  },
-  {
-   "said": "let's begin another round",
-   "expected": null,
-   "kind": "old_command"
-  },
-  {
-   "said": "his sats look good now",
-   "expected": null,
-   "kind": "status"
-  },
-  {
-   "said": "the pressure is fine",
-   "expected": null,
-   "kind": "status"
-  },
-  {
-   "said": "he's breathing nicely",
-   "expected": null,
-   "kind": "status"
-  },
-  {
-   "said": "he's sleeping peacefully",
-   "expected": null,
-   "kind": "status"
-  },
-  {
-   "said": "BIS is stable at forty five",
-   "expected": null,
-   "kind": "status"
-  },
-  {
-   "said": "blood pressure one twenty over eighty, all good",
-   "expected": null,
-   "kind": "status"
-  },
-  {
-   "said": "the pulse is strong",
-   "expected": null,
-   "kind": "status"
-  },
-  {
-   "said": "his eyes are taped shut",
-   "expected": null,
-   "kind": "status"
-  },
-  {
-   "said": "good, he's not moving at all",
-   "expected": null,
-   "kind": "status"
-  },
-  {
-   "said": "the air conditioning is loud in here",
-   "expected": null,
-   "kind": "status"
-  },
-  {
-   "said": "saturation ninety eight, perfect",
-   "expected": null,
-   "kind": "status"
-  },
-  {
-   "said": "he looks pink and comfortable",
-   "expected": null,
-   "kind": "status"
+ "about": "Orders for the nurse, written 14 Nov 2026 by one author (they share a style; real speakers on the board are the test that counts). An order names the drug and, mostly, an amount; numbers are mostly digits because Whistle writes digits. 'expected' lists [drug, amount] per order; amount null = named without an amount, the standard dose. kind 'order': drug and amount (also two orders in one sentence, and corrections where the last amount counts). kind 'named': the drug without an amount. kind 'talk': no drug named, never an order. kind 'named_talk': names a drug but gives no order; by design this becomes a standard dose (a known limitation, reported apart).",
+ "orders": [
+  {
+   "said": "Set oxygen to 60.",
+   "kind": "order",
+   "expected": [
+    [
+     "oxygen",
+     60
+    ]
+   ]
+  },
+  {
+   "said": "Oxygen 60 percent.",
+   "kind": "order",
+   "expected": [
+    [
+     "oxygen",
+     60
+    ]
+   ]
+  },
+  {
+   "said": "Turn the oxygen up to 80 percent please.",
+   "kind": "order",
+   "expected": [
+    [
+     "oxygen",
+     80
+    ]
+   ]
+  },
+  {
+   "said": "FiO2 70.",
+   "kind": "order",
+   "expected": [
+    [
+     "oxygen",
+     70
+    ]
+   ]
+  },
+  {
+   "said": "Give him 50 percent oxygen.",
+   "kind": "order",
+   "expected": [
+    [
+     "oxygen",
+     50
+    ]
+   ]
+  },
+  {
+   "said": "Oxygen to 90, quickly.",
+   "kind": "order",
+   "expected": [
+    [
+     "oxygen",
+     90
+    ]
+   ]
+  },
+  {
+   "said": "Put him on 100 percent oxygen.",
+   "kind": "order",
+   "expected": [
+    [
+     "oxygen",
+     100
+    ]
+   ]
+  },
+  {
+   "said": "Can we go to 65 percent oxygen?",
+   "kind": "order",
+   "expected": [
+    [
+     "oxygen",
+     65
+    ]
+   ]
+  },
+  {
+   "said": "Increase oxygen to 75.",
+   "kind": "order",
+   "expected": [
+    [
+     "oxygen",
+     75
+    ]
+   ]
+  },
+  {
+   "said": "Oxygen up to fifty.",
+   "kind": "order",
+   "expected": [
+    [
+     "oxygen",
+     50
+    ]
+   ]
+  },
+  {
+   "said": "Give him 30 milligrams of propofol.",
+   "kind": "order",
+   "expected": [
+    [
+     "propofol",
+     30
+    ]
+   ]
+  },
+  {
+   "said": "Propofol 20.",
+   "kind": "order",
+   "expected": [
+    [
+     "propofol",
+     20
+    ]
+   ]
+  },
+  {
+   "said": "20 milligrams of propofol please.",
+   "kind": "order",
+   "expected": [
+    [
+     "propofol",
+     20
+    ]
+   ]
+  },
+  {
+   "said": "Push 40 of propofol.",
+   "kind": "order",
+   "expected": [
+    [
+     "propofol",
+     40
+    ]
+   ]
+  },
+  {
+   "said": "Another 10 milligrams propofol.",
+   "kind": "order",
+   "expected": [
+    [
+     "propofol",
+     10
+    ]
+   ]
+  },
+  {
+   "said": "Propofol, 50 milligrams.",
+   "kind": "order",
+   "expected": [
+    [
+     "propofol",
+     50
+    ]
+   ]
+  },
+  {
+   "said": "Let's give 25 mg propofol.",
+   "kind": "order",
+   "expected": [
+    [
+     "propofol",
+     25
+    ]
+   ]
+  },
+  {
+   "said": "He needs 60 milligrams of propofol now.",
+   "kind": "order",
+   "expected": [
+    [
+     "propofol",
+     60
+    ]
+   ]
+  },
+  {
+   "said": "Propofol thirty.",
+   "kind": "order",
+   "expected": [
+    [
+     "propofol",
+     30
+    ]
+   ]
+  },
+  {
+   "said": "Bolus of 15 milligrams propofol.",
+   "kind": "order",
+   "expected": [
+    [
+     "propofol",
+     15
+    ]
+   ]
+  },
+  {
+   "said": "Push 10 micrograms of adrenaline.",
+   "kind": "order",
+   "expected": [
+    [
+     "adrenaline",
+     10
+    ]
+   ]
+  },
+  {
+   "said": "Adrenaline 10.",
+   "kind": "order",
+   "expected": [
+    [
+     "adrenaline",
+     10
+    ]
+   ]
+  },
+  {
+   "said": "Let's do 15 micrograms adrenaline.",
+   "kind": "order",
+   "expected": [
+    [
+     "adrenaline",
+     15
+    ]
+   ]
+  },
+  {
+   "said": "Give 20 micrograms of epinephrine.",
+   "kind": "order",
+   "expected": [
+    [
+     "adrenaline",
+     20
+    ]
+   ]
+  },
+  {
+   "said": "Adrenaline, 30 micrograms, now.",
+   "kind": "order",
+   "expected": [
+    [
+     "adrenaline",
+     30
+    ]
+   ]
+  },
+  {
+   "said": "Another 5 micrograms of adrenaline.",
+   "kind": "order",
+   "expected": [
+    [
+     "adrenaline",
+     5
+    ]
+   ]
+  },
+  {
+   "said": "He needs 25 of adrenaline.",
+   "kind": "order",
+   "expected": [
+    [
+     "adrenaline",
+     25
+    ]
+   ]
+  },
+  {
+   "said": "Epinephrine 12 micrograms.",
+   "kind": "order",
+   "expected": [
+    [
+     "adrenaline",
+     12
+    ]
+   ]
+  },
+  {
+   "said": "Adrenaline twenty.",
+   "kind": "order",
+   "expected": [
+    [
+     "adrenaline",
+     20
+    ]
+   ]
+  },
+  {
+   "said": "Draw up and give 8 micrograms adrenaline.",
+   "kind": "order",
+   "expected": [
+    [
+     "adrenaline",
+     8
+    ]
+   ]
+  },
+  {
+   "said": "Give him 40 of propofol and turn the oxygen to 70.",
+   "kind": "order",
+   "expected": [
+    [
+     "propofol",
+     40
+    ],
+    [
+     "oxygen",
+     70
+    ]
+   ]
+  },
+  {
+   "said": "Oxygen 60 and 10 micrograms adrenaline.",
+   "kind": "order",
+   "expected": [
+    [
+     "oxygen",
+     60
+    ],
+    [
+     "adrenaline",
+     10
+    ]
+   ]
+  },
+  {
+   "said": "Propofol 20 and adrenaline 10.",
+   "kind": "order",
+   "expected": [
+    [
+     "propofol",
+     20
+    ],
+    [
+     "adrenaline",
+     10
+    ]
+   ]
+  },
+  {
+   "said": "Propofol 20, no wait, 30.",
+   "kind": "order",
+   "expected": [
+    [
+     "propofol",
+     30
+    ]
+   ]
+  },
+  {
+   "said": "Oxygen to 50, actually make it 70.",
+   "kind": "order",
+   "expected": [
+    [
+     "oxygen",
+     70
+    ]
+   ]
+  },
+  {
+   "said": "Adrenaline 10, sorry, 15.",
+   "kind": "order",
+   "expected": [
+    [
+     "adrenaline",
+     15
+    ]
+   ]
+  },
+  {
+   "said": "Propofol.",
+   "kind": "named",
+   "expected": [
+    [
+     "propofol",
+     null
+    ]
+   ]
+  },
+  {
+   "said": "Oxygen please.",
+   "kind": "named",
+   "expected": [
+    [
+     "oxygen",
+     null
+    ]
+   ]
+  },
+  {
+   "said": "Give him adrenaline.",
+   "kind": "named",
+   "expected": [
+    [
+     "adrenaline",
+     null
+    ]
+   ]
+  },
+  {
+   "said": "More propofol!",
+   "kind": "named",
+   "expected": [
+    [
+     "propofol",
+     null
+    ]
+   ]
+  },
+  {
+   "said": "Epinephrine, now.",
+   "kind": "named",
+   "expected": [
+    [
+     "adrenaline",
+     null
+    ]
+   ]
+  },
+  {
+   "said": "Turn up the oxygen.",
+   "kind": "named",
+   "expected": [
+    [
+     "oxygen",
+     null
+    ]
+   ]
+  },
+  {
+   "said": "His sats look good now.",
+   "kind": "talk",
+   "expected": []
+  },
+  {
+   "said": "He can't breathe.",
+   "kind": "talk",
+   "expected": []
+  },
+  {
+   "said": "Nice weather today.",
+   "kind": "talk",
+   "expected": []
+  },
+  {
+   "said": "Give me the clamp.",
+   "kind": "talk",
+   "expected": []
+  },
+  {
+   "said": "Pressure is 85.",
+   "kind": "talk",
+   "expected": []
+  },
+  {
+   "said": "BIS is at 64.",
+   "kind": "talk",
+   "expected": []
+  },
+  {
+   "said": "We have 30 seconds left.",
+   "kind": "talk",
+   "expected": []
+  },
+  {
+   "said": "That's 2 contacts already.",
+   "kind": "talk",
+   "expected": []
+  },
+  {
+   "said": "Pass me the forceps please.",
+   "kind": "talk",
+   "expected": []
+  },
+  {
+   "said": "I need 10 more seconds.",
+   "kind": "talk",
+   "expected": []
+  },
+  {
+   "said": "Saturation is 88 percent.",
+   "kind": "talk",
+   "expected": []
+  },
+  {
+   "said": "How much do I give?",
+   "kind": "talk",
+   "expected": []
+  },
+  {
+   "said": "Good job everyone.",
+   "kind": "talk",
+   "expected": []
+  },
+  {
+   "said": "Hold on.",
+   "kind": "talk",
+   "expected": []
+  },
+  {
+   "said": "Is the propofol ready?",
+   "kind": "named_talk",
+   "expected": []
+  },
+  {
+   "said": "We gave 30 of propofol earlier.",
+   "kind": "named_talk",
+   "expected": []
+  },
+  {
+   "said": "Where is the adrenaline?",
+   "kind": "named_talk",
+   "expected": []
+  },
+  {
+   "said": "The oxygen tank is almost empty.",
+   "kind": "named_talk",
+   "expected": []
   }
  ],
  "answers": [

@@ -1,26 +1,26 @@
-"""One speech segment -> an older command or a nurse's treatment.
+"""One speech segment -> an older command or the nurse's orders.
 
 Two paths that never fire each other's words:
 
 - The older commands (instruments, steady, light, pause, ...) stay on the
   Vosk grammar and the keyword matcher, exactly as before.
-- The treatments of the vitals monitor (oxygen, anaesthesia, adrenaline) go
-  through a sentence recogniser (Whistle) and a treatment interpreter
-  (keywords first, then Needle).
+- The orders for the vitals monitor name a drug and an amount ("Propofol
+  30", "oxygen to 60 percent"). They go through a sentence recogniser
+  (Whistle) and an order interpreter (Needle reads the drug and the amount).
 
 Both recognisers hear the same segment. A short call with a command phrase
 ("Clamp!") is decided by the grammar at once and the sentence recogniser
 never runs. A longer segment, or one the grammar did not catch, is
-transcribed by Whistle at its end; if it holds a treatment, that wins (the
-grammar forces any speech onto its nearest phrase, so its word for "he can't
-breathe" means nothing), otherwise the grammar's result stands as before.
+transcribed by Whistle at its end; if it names a drug, the orders win (the
+grammar forces any speech onto its nearest phrase), otherwise the grammar's
+result stands as before.
 
-Needle only runs while the game expects an instruction (an alarm is open,
-`expecting`): measured on the published rungs, it calls a tool for talk
-about the patient ("his sats look good now") too. Outside an alarm only a
-treatment named in so many words counts. Without a sentence recogniser the
-treatment phrases join the grammar instead, so the game stays playable by
-voice without any model (criterion T3).
+A drug must be named: speech without a drug name is never an order. While
+the nurse waits for one (an alarm is open, `expecting`), such a sentence
+gets "Pardon, doctor?". A drug named without an amount is an order at the
+standard dose. Without a sentence recogniser the drug names join the
+grammar instead (standard doses), so the game stays playable by voice
+without any model (criterion T3).
 
 Transcripts never leave this module and VoiceService.
 """
@@ -28,8 +28,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .command_matcher import CommandMatcher
-from .interpreter import CommandInterpreter
+from .interpreter import CommandInterpreter, Match, OrderInterpreter
+from .named_orders import NamedOrders
 from .recognizer import SpeechRecognizer
 
 
@@ -41,6 +41,7 @@ class Understood:
     reason: str = ""  # for "unclear": "low_confidence" | "no_instruction"
     text: str = ""  # for the on-screen debug panel only
     sentence_ran: bool = False  # the sentence recogniser was used (for the energy numbers)
+    orders: tuple[Match, ...] = ()  # for "treatment": every order, with its amount
 
 
 class CommandUnderstanding:
@@ -51,7 +52,7 @@ class CommandUnderstanding:
         confidence_threshold: float,
         treatments: dict[str, list[str]],
         sentence_recognizer: SpeechRecognizer | None = None,
-        treatment_interpreter: CommandInterpreter | None = None,
+        treatment_interpreter: OrderInterpreter | None = None,
         sentence_confidence_threshold: float = 0.5,
         short_segment_s: float = 1.2,
     ) -> None:
@@ -59,8 +60,7 @@ class CommandUnderstanding:
         self.command_interpreter = command_interpreter
         self.confidence_threshold = confidence_threshold
         self.sentence_recognizer = sentence_recognizer
-        self.treatment_phrases = CommandMatcher(treatments)
-        self.treatment_interpreter = treatment_interpreter or self.treatment_phrases
+        self.treatment_interpreter = treatment_interpreter or NamedOrders(treatments)
         self.sentence_confidence_threshold = sentence_confidence_threshold
         self.short_segment_s = short_segment_s
 
@@ -89,8 +89,8 @@ class CommandUnderstanding:
     # --- decision ------------------------------------------------------------------
 
     def finish(self, duration_s: float, expecting: bool) -> Understood:
-        """Decide the segment that just ended. `expecting`: the game waits for a
-        treatment (an alarm is open)."""
+        """Decide the segment that just ended. `expecting`: the nurse waits for
+        an order (an alarm is open)."""
         heard = self.command_recognizer.finish()
         match = self.command_interpreter.interpret(heard.text)
         confidence = 0.0
@@ -105,9 +105,10 @@ class CommandUnderstanding:
 
         sentence = self.sentence_recognizer.finish()
         text = sentence.text.strip()
-        treatment = self._treatment(text, expecting) if sentence.confidence >= self.sentence_confidence_threshold else None
-        if treatment is not None:
-            return Understood("treatment", treatment[0], treatment[1], text=text, sentence_ran=True)
+        orders = self.treatment_interpreter.orders(text) if text and sentence.confidence >= self.sentence_confidence_threshold else []
+        if orders:
+            first = orders[0]
+            return Understood("treatment", first.word, first.score, text=text, sentence_ran=True, orders=tuple(orders))
         if sure:
             return Understood("command", match.word, confidence, text=heard.text, sentence_ran=True)
         if expecting and text:
@@ -122,14 +123,3 @@ class CommandUnderstanding:
         if command.confidence < self.confidence_threshold:
             return Understood("unclear", command.word, command.confidence, reason="low_confidence", text=text)
         return command
-
-    def _treatment(self, text: str, expecting: bool) -> tuple[str, float] | None:
-        if not text:
-            return None
-        named = self.treatment_phrases.interpret(text)
-        if named is not None and named.score == 1.0:
-            return named.word, 1.0
-        if not expecting:
-            return None  # outside an alarm only a treatment said in so many words counts
-        hit = self.treatment_interpreter.interpret(text)
-        return (hit.word, hit.score) if hit is not None else None

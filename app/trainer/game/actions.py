@@ -7,9 +7,11 @@ schemas and turns the model's call back into a command word, so
 
 `triggers` are regular expressions the Cactus runtime matches against the
 request (a documented field of its tool schema). Measured on 14 Nov 2026,
-they decide whether Needle picks the right one of several tools without
-parameters: without them every rung tested picked the same tool for almost
-every sentence. They hold domain words, not test sentences.
+they decide whether Needle picks the right one of several tools: without
+them every rung tested picked the same tool for almost every sentence. The
+nurse's tools trigger on the drug's names, and their amount is an integer
+parameter: the runtime flags an amount that is not in the sentence
+("ungrounded"), so talk without a number gives no order.
 """
 from __future__ import annotations
 
@@ -27,12 +29,23 @@ INSTRUMENT_HELP = (
 
 
 @dataclass(frozen=True)
+class Amount:
+    """An integer parameter: how much of a drug, or a setting."""
+
+    name: str  # the parameter's name, e.g. "milligrams"
+    minimum: int
+    maximum: int
+    help: str  # tells the model what the number is
+
+
+@dataclass(frozen=True)
 class GameAction:
     name: str
     description: str
     command: str = ""  # the command word; "" when a parameter supplies it
     parameters: Mapping[str, tuple[str, ...]] = field(default_factory=dict)  # name -> allowed values
     triggers: tuple[str, ...] = ()  # request regexes for the runtime (ECMAScript syntax)
+    amount: Amount | None = None
 
     def command_words(self) -> tuple[str, ...]:
         if self.command:
@@ -40,10 +53,13 @@ class GameAction:
         return tuple(v for values in self.parameters.values() for v in values)
 
     def schema(self, allowed: Sequence[str] | None = None) -> dict:
-        properties = {}
+        properties: dict[str, dict] = {}
         for name, values in self.parameters.items():
             usable = [v for v in values if allowed is None or v in allowed]
             properties[name] = {"type": "string", "enum": usable}
+        if self.amount is not None:
+            a = self.amount
+            properties[a.name] = {"type": "integer", "minimum": a.minimum, "maximum": a.maximum, "description": a.help}
         schema = {
             "name": self.name,
             "description": self.description,
@@ -54,36 +70,35 @@ class GameAction:
         return schema
 
 
-# Treatments the nurse gives on the surgeon's instruction (the vitals monitor).
+# The nurse's orders on the vitals monitor: the drug is named, the amount said.
 TREATMENT_ACTIONS: tuple[GameAction, ...] = (
     GameAction(
-        "give_oxygen",
-        "Give the patient more oxygen when the oxygen saturation is low or the patient cannot breathe.",
+        "set_oxygen",
+        "Set the oxygen fraction the patient breathes, in percent.",
         command="oxygen",
-        triggers=(r"\b(oxygen|o2|breath\w*|air|airway|blue|cyanos\w*|sats?|saturat\w*|spo2|suffocat\w*|hypox\w*|ventilat\w*)\b",),
+        triggers=(r"\b(oxygen|o2|fio2)\b",),
+        amount=Amount("percent", 21, 100, "oxygen in percent, 21 to 100"),
     ),
     GameAction(
-        "deepen_anaesthesia",
-        "Deepen the anaesthesia when the patient is waking up, moving or feels pain.",
-        command="anaesthesia",
-        triggers=(r"\b(an(a)?esthe\w*|propofol|sedat\w*|wak\w*|awake|mov(e|es|ed|ing)|deeper|sleep\w*|pain|feel\w*|bis|eyes?|twitch\w*)\b",),
+        "give_propofol",
+        "Give propofol to deepen the anaesthesia.",
+        command="propofol",
+        triggers=(r"\b(propofol|propophol)\b",),
+        amount=Amount("milligrams", 5, 200, "dose in milligrams"),
     ),
     GameAction(
         "give_adrenaline",
-        "Give adrenaline when the blood pressure is low or falling.",
+        "Give adrenaline to raise the blood pressure.",
         command="adrenaline",
-        triggers=(r"\b(adrenalin\w*|epinephrin\w*|pressure|bp|shock|crash\w*|pulse|systolic|hypotens\w*|faint\w*)\b",),
+        triggers=(r"\b(adrenalin\w*|epinephrin\w*)\b",),
+        amount=Amount("micrograms", 5, 100, "dose in micrograms"),
     ),
 )
 
-# Words Whistle is biased towards when it hears a sentence for the nurse (its
-# `keywords`): the words of a patient in trouble. Without them Whistle wrote
-# "saps" for "sats" and "waiting up" for "waking up" (14 Nov 2026, synthetic
-# voices), and Needle never saw a trigger word.
-SYMPTOM_WORDS: tuple[str, ...] = (
-    "sats", "saturation", "breathe", "breathing", "blue", "air", "hypoxic",
-    "waking", "awake", "moving", "pain", "sedation", "deeper", "BIS",
-    "pressure", "shock", "pulse", "systolic", "crashing", "hypotensive",
+# Words Whistle is biased towards when it hears an order (its `keywords`):
+# the drugs and their units.
+ORDER_WORDS: tuple[str, ...] = (
+    "oxygen", "FiO2", "percent", "propofol", "milligrams", "adrenaline", "epinephrine", "micrograms",
 )
 
 SELECT_INSTRUMENT = GameAction(
@@ -106,11 +121,11 @@ DEFAULT_ACTIONS: tuple[GameAction, ...] = (
     GameAction("new_game", "Start a new round.", command="new game"),
 )
 
-# What Needle gets: the treatments only. Whistle and Needle serve the vitals
-# monitor; every older command stays on the Vosk grammar, and neither path
-# fires the other's commands. (Measured 14 Nov 2026: with the instrument tool
-# added, Needle picked the wrong instrument for 16 of 16 clamp and scalpel
-# sentences and false triggers rose. The runtime's docs advise five tools or fewer.)
+# What Needle gets: the nurse's orders only. Whistle and Needle serve the
+# vitals monitor; every older command stays on the Vosk grammar, and neither
+# path fires the other's commands. (Measured 14 Nov 2026: with the instrument
+# tool added, Needle picked the wrong instrument for 16 of 16 clamp and
+# scalpel sentences. The runtime's docs advise five tools or fewer.)
 MODEL_ACTIONS: tuple[GameAction, ...] = TREATMENT_ACTIONS
 
 
@@ -134,6 +149,16 @@ class ActionCatalog:
                 continue
             out.append(action.schema(allowed))
         return out
+
+    def amount(self, name: str, arguments: Mapping[str, object] | None = None) -> float | None:
+        """The amount in a tool call, clamped to the tool's range; None if it has none."""
+        action = self._actions.get(name)
+        if action is None or action.amount is None:
+            return None
+        value = (arguments or {}).get(action.amount.name)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        return float(min(action.amount.maximum, max(action.amount.minimum, value)))
 
     def command_word(self, name: str, arguments: Mapping[str, object] | None = None) -> str | None:
         """The command word for a tool call, or None if the call is not valid."""

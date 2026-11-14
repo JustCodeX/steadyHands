@@ -28,16 +28,17 @@ DEFAULT_COMMANDS: dict[str, list[str]] = {
 }
 
 TOOL_WORDS = ("forceps", "swab", "clamp", "scalpel")
-TREATMENT_WORDS = ("oxygen", "anaesthesia", "adrenaline")
+TREATMENT_WORDS = ("oxygen", "propofol", "adrenaline")
 
-# Treatment word -> phrases, for the vitals monitor. Heard by Whistle and
-# decided by Needle, apart from the commands above, which stay on the Vosk
-# grammar: neither path fires the other's words. Only without the Cactus
-# models do these phrases join the Vosk grammar, so the game stays playable
-# by voice (criterion T3).
+# Drug -> its names, for the nurse's orders on the vitals monitor. An order
+# names the drug and, with Whistle and Needle, an amount ("Propofol 30").
+# They stay apart from the commands above, which stay on the Vosk grammar:
+# neither path fires the other's words. Only without the Cactus models do
+# these names join the Vosk grammar (orders at the standard dose), so the
+# game stays playable by voice (criterion T3).
 DEFAULT_TREATMENTS: dict[str, list[str]] = {
     "oxygen": ["oxygen"],
-    "anaesthesia": ["anaesthesia", "anesthesia", "propofol"],
+    "propofol": ["propofol"],
     "adrenaline": ["adrenaline", "epinephrine"],
 }
 
@@ -113,8 +114,8 @@ class VoiceConfig:
     # Vosk command grammar; no model needed), "whistle" (Cactus), or "vosk"
     # (open vocabulary). The older commands stay on the Vosk grammar either way.
     sentence_recognizer: str = "none"
-    # Sentence -> treatment: "keyword" (phrases) or "needle" (phrases first,
-    # then the Needle model, only while an alarm is open).
+    # Sentence -> orders: "keyword" (drug names only, standard doses) or
+    # "needle" (drug and amount, when a drug is named).
     treatment_interpreter: str = "keyword"
     sentence_confidence_threshold: float = 0.5
     # --- spoken quiz answers (whole sentences) ---
@@ -133,10 +134,11 @@ class VoiceConfig:
     answer_confidence_threshold: float = 0.5
     debug_asr: bool = False  # on-screen side panel with everything the recogniser hears
     # --- Cactus models (optional; see app/cactus.toml) ---
-    needle_weights: str = str(APP_DIR / "models" / "needle3-9L.cact")
+    # 12 layers: the smallest rung that reads drug and amount well enough (tools/needle_eval.py, 14 Nov)
+    needle_weights: str = str(APP_DIR / "models" / "needle3-12L.cact")
     needle_min_confidence: float = 0.1  # the runtime itself holds back calls below 0.1
-    # Needle only runs when a treatment's trigger words are in the sentence:
-    # without this the published rungs call a tool for almost any talk.
+    # Needle only runs when a drug is named in the sentence (its tools'
+    # triggers): without this the published rungs call a tool for almost any talk.
     needle_require_trigger: bool = True
     whistle_weights: str = str(APP_DIR / "models" / "whistle.cact")
     whistle_language: str = "en"  # pinned: auto-detection confuses languages on short segments
@@ -175,9 +177,16 @@ class VitalsConfig:
     drift_to_critical_s: float = 18.0  # a drifting value goes from normal to critical in about this time
     reminder_s: float = 6.0  # the nurse repeats the alarm with the value after this long without the right instruction
     crisis_after_s: float = 4.0  # critical for this long costs a life
-    recover_s: float = 3.0  # after the right instruction the value is back to normal in this time
+    recover_s: float = 3.0  # after an order the value reaches where it settles in about this time
     min_time_left_s: float = 15.0  # no new episode this close to the end of the round
-    pulse_jump_bpm: int = 15  # adrenaline makes the pulse jump
+    effect_s: float = 8.0  # a dose's overshoot and side effects last this long, then wear off
+    repeat_window_s: float = 2.0  # the same order again within this time counts once (heard twice)
+    fio2_baseline: float = 30.0  # oxygen setting (%) at the start; the nurse weans back to it
+    wean_per_s: float = 5.0  # how fast she takes the oxygen back down once the saturation is stable
+    pulse_per_microgram: float = 0.8  # adrenaline makes the pulse jump (bpm per microgram)
+    # An order that names the drug but no amount gets this. It fits about
+    # half of the episodes; the monitor tells the right amount (game/vitals.py).
+    standard_doses: dict[str, float] = field(default_factory=lambda: {"oxygen": 55.0, "propofol": 30.0, "adrenaline": 10.0})
 
 
 @dataclass

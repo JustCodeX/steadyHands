@@ -95,6 +95,42 @@ class NeedleAgent:
         name, arguments = calls[0]
         return ToolCall(name=name, arguments=arguments, confidence=min(1.0, confidence))
 
+    def calls(self, text: str) -> list[ToolCall]:
+        """Every call the model makes for `text` (an order can hold two).
+
+        A call with an argument the runtime flags as ungrounded (a number
+        that is not in the text, i.e. invented) is dropped: "Propofol." or
+        "his sats look good now" give no order. Two calls to the same tool
+        are a correction ("20, no wait, 30"): the last one counts."""
+        self.load()
+        self._agent.reset()  # each text stands alone; old context makes the model refuse
+        result = self._agent.complete(text)
+        self.peak_ram_mb = max(self.peak_ram_mb, float(result.get("peak_ram_mb") or 0.0))
+        calls = list(result.get("function_calls") or [])
+        if not calls and self.min_confidence < RUNTIME_GATE:
+            calls = list(result.get("suppressed_calls") or [])
+        confidence = self._confidence(result)
+        if confidence < self.min_confidence:
+            return []
+        ungrounded = {str(path) for path in (result.get("validation") or {}).get("ungrounded") or []}
+        kept: dict[str, ToolCall] = {}
+        for c in calls:
+            name = str(c.get("name"))
+            if any(path.startswith(name + ".") for path in ungrounded):
+                continue
+            kept.pop(name, None)  # a later call to the same tool replaces the earlier one
+            kept[name] = ToolCall(name=name, arguments=dict(c.get("arguments") or {}), confidence=min(1.0, confidence))
+        return list(kept.values())
+
+    def _confidence(self, result: dict) -> float:
+        confidence = result.get("confidence")
+        if confidence is None:  # weights without a confidence head (e.g. LoRA builds): no gate possible
+            if not self._warned_uncalibrated:
+                log.warning("%s reports no confidence; every call counts", self.weights.name)
+                self._warned_uncalibrated = True
+            return 1.0
+        return float(confidence)
+
     def unload(self) -> None:
         agent, self._agent = self._agent, None
         if agent is not None:

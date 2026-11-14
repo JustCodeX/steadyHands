@@ -36,7 +36,7 @@ from .modes import CoopMode, GameMode, SoloMode
 from .patient import Patient
 from .quiz_director import QuizDirector, QuizOutcome, QuizStep
 from .stress import Stress
-from .vitals import SPECS, TreatmentResult, VitalsMonitor
+from .vitals import DRUG_OF, SPECS, TreatmentResult, VitalsMonitor
 
 log = logging.getLogger(__name__)
 
@@ -189,6 +189,7 @@ class GameEngine(Service):
         self.metrics.questions_wrong = self.quiz.wrong
         self.metrics.treatments_correct = self.vitals.correct
         self.metrics.treatments_wrong = self.vitals.wrong
+        self.metrics.overdoses = self.vitals.overdoses
         self.metrics.crises = self.patient.crises
         self._result = self.metrics.result(self.level.name, won)
         self._result_t = time.monotonic()
@@ -327,7 +328,7 @@ class GameEngine(Service):
             return
 
         if word in TREATMENT_WORDS:
-            self._treat(word)
+            self._treat(word, ev.amount)
         elif word in TOOL_WORDS:
             if self.mode.on_tool_call(word, now):
                 self._set_tool(word, by_voice=True)
@@ -399,23 +400,44 @@ class GameEngine(Service):
                 self.say("Crisis: the team had to step in", 3)
             self.bus.publish(GameEvent(kind=f"vital_{ev.kind}", detail=f"{ev.vital}:{ev.value}"))
 
-    def _treat(self, word: str) -> None:
-        """An instruction to the nurse. The physiology decides what it does."""
+    def _treat(self, word: str, amount: float | None) -> None:
+        """An order to the nurse: a drug and an amount (None: the standard
+        dose). The physiology decides what it does."""
         self._instruction_misses = 0
-        outcome = self.vitals.treat(word)
-        if word == "adrenaline":
-            self.patient.startle(self.vitals_cfg.pulse_jump_bpm)
+        standard = amount is None
+        if standard:
+            amount = float(self.vitals_cfg.standard_doses[word])
+        outcome = self.vitals.order(word, amount)
+        if word == "adrenaline" and outcome.result is not TreatmentResult.ALREADY:
+            self.patient.startle(round(self.vitals_cfg.pulse_per_microgram * amount))
+        label = SPECS[outcome.vital].label if outcome.vital else ""
+        unit = SPECS[DRUG_OF[word]].drug_unit
+        given = f"{word.capitalize()} {amount:g} {unit}"
         if outcome.result is TreatmentResult.WRONG:
-            self.say(f"{word.capitalize()} did not help: {SPECS[outcome.vital].label}", 3)
+            self.say(f"{given} did not help: {label}", 3)
         elif outcome.result is TreatmentResult.UNNEEDED:
-            self.say(f"{word.capitalize()} was not needed", 3)
-        self.bus.publish(GameEvent(kind="treatment", detail=f"{word}:{outcome.result.value}:{outcome.vital}"))
+            self.say(f"{given} was not needed", 3)
+        elif outcome.result is TreatmentResult.OVERDOSE:
+            self.say(f"{given}: too much", 3)
+        elif outcome.result is TreatmentResult.PARTIAL:
+            self.say(f"{given}: not enough yet", 3)
+        detail = f"{word}:{outcome.result.value}:{outcome.vital}:{amount:g}:{'standard' if standard else ''}"
+        self.bus.publish(GameEvent(kind="treatment", detail=detail))
 
     def _vital_views(self) -> list[VitalView]:
         if not self.vitals.active:
             return []
         return [
-            VitalView(key=k, label=v.spec.label, value=round(v.value), unit=v.spec.unit, status=v.status.value, trend=v.trend)
+            VitalView(
+                key=k,
+                label=v.spec.label,
+                value=round(v.value),
+                unit=v.spec.unit,
+                status=v.status.value,
+                trend=v.trend,
+                dose_card=v.spec.dose_card(),
+                setting=f"FiO2 {self.vitals.fio2:.0f}%" if k == "spo2" else "",
+            )
             for k, v in self.vitals.vitals.items()
         ]
 

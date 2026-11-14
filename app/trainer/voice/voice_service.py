@@ -40,7 +40,7 @@ from ..quiz.evaluator import AnswerEvaluator, KeywordEvaluator
 from ..quiz.question import Question, QuestionBank
 from .audio_input import AudioInput
 from .command_matcher import CommandMatcher
-from .interpreter import CommandInterpreter
+from .interpreter import CommandInterpreter, OrderInterpreter
 from .recognizer import EnsembleRecognizer, NullRecognizer, SpeechRecognizer
 from .signal_processor import SignalProcessor
 from .understanding import CommandUnderstanding, Understood
@@ -69,7 +69,7 @@ class VoiceService(Service):
         evaluator: AnswerEvaluator | None = None,
         treatments: dict[str, list[str]] | None = None,
         sentence_recognizer: SpeechRecognizer | None = None,
-        treatment_interpreter: CommandInterpreter | None = None,
+        treatment_interpreter: OrderInterpreter | None = None,
     ) -> None:
         super().__init__(bus)
         self.cfg = cfg
@@ -287,8 +287,14 @@ class VoiceService(Service):
     def handle_segment(self, speech_end_t: float, duration_s: float = 0.0) -> None:
         """Decide the segment and publish the outcome (never the words)."""
         u: Understood = self.understanding.finish(duration_s, self._expecting_instruction())
-        if u.kind in ("command", "treatment"):
-            log.info("%s %s (%.2f)", u.kind, u.word, u.confidence)
+        if u.kind == "treatment":
+            for order in u.orders:
+                amount = "standard dose" if order.amount is None else f"{order.amount:g}"
+                log.info("order %s %s (%.2f)", order.word, amount, order.score)
+                self.bus.publish(CommandEvent(word=order.word, confidence=order.score, amount=order.amount, speech_end_t=speech_end_t))
+            self._debug_asr(u.text, u.confidence, u.kind, " + ".join(o.word for o in u.orders))
+        elif u.kind == "command":
+            log.info("command %s (%.2f)", u.word, u.confidence)
             self.bus.publish(CommandEvent(word=u.word, confidence=u.confidence, speech_end_t=speech_end_t))
             self._debug_asr(u.text, u.confidence, u.kind, u.word)
         elif u.kind == "unclear":
@@ -367,10 +373,10 @@ def build_sentence_recognizer(cfg: VoiceConfig, treatments: dict[str, list[str]]
     if cfg.sentence_recognizer == "none" or cfg.recognizer == "null":
         return None
     if cfg.sentence_recognizer == "whistle":
-        from ..game.actions import SYMPTOM_WORDS
+        from ..game.actions import ORDER_WORDS
 
         try:
-            return _whistle(cfg, sorted({p for phrases in treatments.values() for p in phrases} | set(SYMPTOM_WORDS)))
+            return _whistle(cfg, sorted({p for phrases in treatments.values() for p in phrases} | set(ORDER_WORDS)))
         except Exception as exc:
             log.error("Whistle unavailable (%s); treatments by their names through the command grammar", exc)
             return None
@@ -385,20 +391,20 @@ def build_sentence_recognizer(cfg: VoiceConfig, treatments: dict[str, list[str]]
     raise ValueError(f"unknown sentence_recognizer: {cfg.sentence_recognizer}")
 
 
-def build_treatment_interpreter(cfg: VoiceConfig, treatments: dict[str, list[str]]) -> CommandInterpreter:
-    """Sentence -> treatment: the phrases, plus Needle if configured."""
+def build_treatment_interpreter(cfg: VoiceConfig, treatments: dict[str, list[str]]) -> OrderInterpreter:
+    """Sentence -> orders: the drug names (standard doses), or Needle, which also reads the amount."""
+    from .named_orders import NamedOrders
+
     if cfg.treatment_interpreter == "keyword":
-        return CommandMatcher(treatments)
+        return NamedOrders(treatments)
     if cfg.treatment_interpreter == "needle":
         try:
-            from ..cactus_models.needle_interpreter import NeedleInterpreter
+            from ..cactus_models.needle_orders import NeedleOrders
 
-            return NeedleInterpreter(
-                treatments, cfg.needle_weights, min_confidence=cfg.needle_min_confidence, require_trigger=cfg.needle_require_trigger
-            )
+            return NeedleOrders(treatments, cfg.needle_weights, min_confidence=cfg.needle_min_confidence, require_trigger=cfg.needle_require_trigger)
         except Exception as exc:
-            log.error("Needle unavailable (%s); treatments by their names only", exc)
-            return CommandMatcher(treatments)
+            log.error("Needle unavailable (%s); orders by drug name only, at the standard dose", exc)
+            return NamedOrders(treatments)
     raise ValueError(f"unknown treatment_interpreter: {cfg.treatment_interpreter}")
 
 

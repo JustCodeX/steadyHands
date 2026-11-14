@@ -44,24 +44,25 @@ from trainer.voice.voice_service import (  # noqa: E402
     command_phrases,
 )
 
-# (what is said, alarm open?, expected outcome: a command/treatment word, "pardon" or None)
-CASES: list[tuple[str, bool, str | None]] = [
+# (what is said, alarm open?, expected): a command word, the orders as
+# [(drug, amount)] (amount None: standard dose), "pardon", or None (nothing).
+CASES: list[tuple[str, bool, object]] = [
     ("Clamp!", False, "clamp"),
     ("Forceps.", True, "forceps"),
     ("Steady.", False, "steady"),
-    ("Oxygen!", True, "oxygen"),
-    ("Give him some adrenaline.", True, "adrenaline"),
-    ("He can't breathe, do something.", True, "oxygen"),
-    ("His sats are dropping fast.", True, "oxygen"),
-    ("The patient is waking up.", True, "anaesthesia"),
-    ("He's moving, put him deeper.", True, "anaesthesia"),
-    ("His blood pressure is falling.", True, "adrenaline"),
-    ("He's going into shock.", True, "adrenaline"),
+    ("Propofol 30.", True, [("propofol", 30.0)]),
+    ("Give him 40 milligrams of propofol.", True, [("propofol", 40.0)]),
+    ("Set oxygen to 60 percent.", True, [("oxygen", 60.0)]),
+    ("Push 10 micrograms of adrenaline.", True, [("adrenaline", 10.0)]),
+    ("Adrenaline 20 micrograms.", False, [("adrenaline", 20.0)]),
+    ("Give him 40 of propofol and turn the oxygen to 70.", True, [("propofol", 40.0), ("oxygen", 70.0)]),
+    ("Propofol 20, no wait, 30.", True, [("propofol", 30.0)]),
+    ("More propofol!", True, [("propofol", None)]),
+    ("Oxygen!", True, [("oxygen", None)]),
     ("Hand me the clamp please.", True, "clamp"),
     ("What a lovely day it is.", True, "pardon"),
     ("What a lovely day it is.", False, None),
     ("His sats look good now.", False, None),
-    ("He can't breathe, do something.", False, None),
 ]
 VOICES = ("Samantha", "Daniel")
 
@@ -176,7 +177,13 @@ def main(argv: list[str] | None = None) -> int:
                     time.sleep(0.05)
                     bus.dispatch()
                     event = seen[0] if seen else None
-                    got = event.word if isinstance(event, CommandEvent) else ("pardon" if isinstance(event, MisheardEvent) else None)
+                    commands = [e for e in seen if isinstance(e, CommandEvent)]
+                    if isinstance(expected, list):
+                        got = [(e.word, e.amount) for e in commands]
+                    elif commands:
+                        got = commands[0].word
+                    else:
+                        got = "pardon" if isinstance(event, MisheardEvent) else None
                     latency = (event.t - event.speech_end_t) * 1000 if event is not None and event.speech_end_t else None
                     rows.append({"voice": voice, "said": text, "alarm": alarm, "expected": expected, "got": got, "ok": got == expected,
                                  "latency_ms": round(latency) if latency is not None else None})
