@@ -1,0 +1,103 @@
+{
+  "version": "2.0.0",
+  "inputs": [
+    {
+      "id": "appId",
+      "type": "promptString",
+      "description": "App id (see 'App Lab: Apps')"
+    }
+  ],
+  "tasks": [
+    {
+      "label": "App Lab: Apps",
+      "type": "shell",
+      "command": "increment1/tools/applab.py apps",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "App Lab: Models",
+      "type": "shell",
+      "command": "increment1/tools/applab.py models",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "App Lab: Bricks",
+      "type": "shell",
+      "command": "increment1/tools/applab.py bricks",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "App Lab: Resources",
+      "type": "shell",
+      "command": "increment1/tools/applab.py resources",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "App Lab: Start app",
+      "type": "shell",
+      "command": "increment1/tools/applab.py start ${input:appId}",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "App Lab: Stop app",
+      "type": "shell",
+      "command": "increment1/tools/applab.py stop ${input:appId}",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "App Lab: App logs",
+      "type": "shell",
+      "command": "increment1/tools/applab.py logs ${input:appId} 200",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    }
+  ]
+}

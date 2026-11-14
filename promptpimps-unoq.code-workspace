@@ -1,0 +1,22 @@
+{
+  // Open this file (File > Open Workspace from File...) instead of a plain
+  // folder. The repo root makes app/, docs/, levels/ and the planning docs
+  // visible; firmware/ is listed a second time because the PlatformIO
+  // extension only activates when platformio.ini sits at the root of a
+  // workspace folder.
+  "folders": [
+    {
+      "name": "promptpimps-unoq",
+      "path": "."
+    },
+    {
+      "name": "firmware (PlatformIO)",
+      "path": "firmware"
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/.pio": true
+    }
+  }
+}
