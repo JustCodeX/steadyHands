@@ -24,7 +24,7 @@ How the project answers the judging criteria (20 % each):
 | Innovation | A tool-calling model reads drug *and dose* from free speech, on the board; steering by two distance sensors with a freeze key instead of a joystick |
 | Technical quality | One class per feature behind small interfaces ([PLAN.md](PLAN.md#code-design)), 174 app tests plus firmware unit tests, every number measured on the board ([docs/measurements.md](docs/measurements.md)) |
 | Real-world impact | Skills-lab training for medical students: steady hand, instrument calls and dosed orders at once; offline, so it fits hospital data-protection rules |
-| Environmental impact (SCI) | No general LLM, models gated by voice activity, smallest Needle rung, pre-rendered voices; SCI method in the [technical documentation](docs/technical-documentation.md#environmental-impact-sci) (power not measured yet) |
+| Environmental impact (SCI) | **About 0.07–0.12 g CO₂e per training round**, estimated from published power figures ([calculation](docs/technical-documentation.md#environmental-impact-sci)); no general LLM, models gated by voice activity, smallest Needle rung, pre-rendered voices |
 | Presentation and demo | [pitch/](pitch/README.md), 5 minutes with the live round on video |
 
 ## A round
