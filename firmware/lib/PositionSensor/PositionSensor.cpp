@@ -159,9 +159,7 @@ void PositionSensor::update(uint32_t nowMs) {
     lastRetryMs_ = nowMs;
     bringUp();
   }
-  // Keep the bus quiet while a module is still to be plugged in.
-  const uint16_t hz = ok() ? cfg::SLOW_HZ : cfg::POS_QUIET_HZ;
-  if (nowMs - lastPollMs_ < 1000 / hz) return;
+  if (nowMs - lastPollMs_ < 1000 / cfg::SLOW_HZ) return;
   lastPollMs_ = nowMs;
   if (foundX_) feed(axisX_, tofX_, nowMs);
   if (foundY_) feed(axisY_, tofY_, nowMs);

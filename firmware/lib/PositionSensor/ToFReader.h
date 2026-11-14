@@ -86,20 +86,15 @@ public:
     release();
     selectChannel();
     lastId_ = modelId(currentAddr7);
-    // Stop any ranging left over from a previous run before init: the MCU can
-    // restart (watchdog, re-flash) while the sensors keep their power, and
-    // initialising a chip that is still measuring fails.
     if (lastId_ == ID_CD) {
       cd_ = new ToFCD(&wire_);
       cd_->useAddress(currentAddr7);
-      cd_->VL53L4CD_StopRanging();
       if (cd_->InitSensor(addr7 << 1) != VL53L4CD_ERROR_NONE) return release();
       cd_->VL53L4CD_SetRangeTiming(20, 0);
       cd_->VL53L4CD_StartRanging();
     } else if (lastId_ == ID_ED) {
       ed_ = new ToFED(&wire_);
       ed_->useAddress(currentAddr7);
-      ed_->VL53L4ED_StopRanging();
       if (ed_->InitSensor(addr7 << 1) != VL53L4ED_ERROR_NONE) return release();
       ed_->VL53L4ED_SetRangeTiming(20, 0);
       ed_->VL53L4ED_StartRanging();
