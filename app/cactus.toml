@@ -1,0 +1,29 @@
+# Switches on the Cactus models (Whistle, Needle) for the nurse's orders on
+# the vitals monitor: a drug and an amount ("Propofol 30"). Needs `pip install -r requirements-cactus.txt`, the
+# engine (`python -m cactus fetch`, online, once) and the model files in
+# app/models/ (docs/needle-integration.md). Without them the app logs one
+# line per missing piece and orders work by the drug's name through the
+# Vosk grammar, at the standard dose, as without this file.
+#   python -m trainer --config cactus.toml
+#
+# The older voice commands (instruments, steady, light, pause, ...) stay on
+# the Vosk grammar either way; Whistle and Needle never decide them.
+
+[voice]
+# Whistle hears the order ("give him 30 milligrams of propofol"). A short
+# call with a command phrase ("Clamp!") is decided by the grammar and never
+# reaches Whistle.
+sentence_recognizer = "whistle"
+
+# Needle reads the drug and the amount, only when a drug is named
+# (needle_require_trigger). A drug named without an amount gets the
+# standard dose (vitals.standard_doses).
+treatment_interpreter = "needle"
+# needle_weights defaults to app/models/needle3-12L.cact
+
+# The quiz is off by default since the vitals monitor. With it on, Needle can
+# also judge answers that name no option in so many words:
+# [quiz]
+# enabled = true
+# [voice]
+# evaluator = "needle"

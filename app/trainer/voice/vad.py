@@ -42,12 +42,29 @@ class Segmenter:
     """Hysteresis around the block decisions.
 
     A segment starts after `start_blocks` speech blocks in a row and ends after
-    `hangover_blocks` silent blocks; it is cut at `max_blocks`."""
+    `hangover_blocks` silent blocks; it is cut at `max_blocks`.
 
-    def __init__(self, start_blocks: int = 3, hangover_blocks: int = 20, max_blocks: int = 150) -> None:
+    Adaptive end: once a segment is longer than `long_after_blocks` it is a
+    sentence, not a call. Then `long_hangover_blocks` of silence end it and
+    it may grow to `long_max_blocks`, so a pause to think does not cut the
+    sentence, while a quick "Clamp!" still ends after the short hangover."""
+
+    def __init__(
+        self,
+        start_blocks: int = 3,
+        hangover_blocks: int = 20,
+        max_blocks: int = 150,
+        long_after_blocks: int | None = None,
+        long_hangover_blocks: int | None = None,
+        long_max_blocks: int | None = None,
+    ) -> None:
         self.start_blocks = start_blocks
         self.hangover_blocks = hangover_blocks
         self.max_blocks = max_blocks
+        self.long_after_blocks = long_after_blocks
+        self.long_hangover_blocks = long_hangover_blocks or hangover_blocks
+        self.long_max_blocks = long_max_blocks or max_blocks
+        self.last_length = 0  # blocks of the segment that ended last
         self.reset()
 
     def reset(self) -> None:
@@ -68,7 +85,11 @@ class Segmenter:
             return "idle"
         self._length += 1
         self._silence_run = 0 if speech else self._silence_run + 1
-        if self._silence_run >= self.hangover_blocks or self._length >= self.max_blocks:
+        long = self.long_after_blocks is not None and self._length - self._silence_run > self.long_after_blocks
+        hangover = self.long_hangover_blocks if long else self.hangover_blocks
+        limit = self.long_max_blocks if long else self.max_blocks
+        if self._silence_run >= hangover or self._length >= limit:
+            self.last_length = self._length - self._silence_run  # the speech, without the trailing silence
             self.reset()
             return "end"
         return "continue"

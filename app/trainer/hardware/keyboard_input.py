@@ -1,11 +1,13 @@
 """Keyboard as an input source for development and as a demo fallback.
 
 Arrow keys tilt, Space is button A, M is B, C is C, +/- turn the knob, Enter presses it.
-Number keys 1-4 call tools; letters send the other voice commands as if heard.
+Number keys 1-4 call tools, 5-7 order the nurse's drugs at the standard dose (oxygen,
+propofol, adrenaline); letters send the other voice commands as if heard.
+Y and U answer the open quiz question right and wrong.
 """
 from __future__ import annotations
 
-from ..core.events import CommandEvent, InputFrame, KeyEvent
+from ..core.events import AnswerEvent, CommandEvent, InputFrame, KeyEvent
 from ..core.service import Service
 
 KEY_COMMANDS = {
@@ -13,6 +15,9 @@ KEY_COMMANDS = {
     "2": "swab",
     "3": "clamp",
     "4": "scalpel",
+    "5": "oxygen",
+    "6": "propofol",
+    "7": "adrenaline",
     "l": "light",
     "s": "steady",
     "x": "cancel",
@@ -22,6 +27,8 @@ KEY_COMMANDS = {
     "o": "continue",
     "n": "new game",
 }
+
+KEY_ANSWERS = {"y": True, "u": False}  # is the answer correct?
 
 KEY_BUTTONS = {"space": InputFrame.BTN_A, "m": InputFrame.BTN_B, "c": InputFrame.BTN_C, "return": InputFrame.BTN_KNOB}
 
@@ -45,6 +52,8 @@ class KeyboardInput(Service):
             self._active = True
             if ev.key in KEY_COMMANDS:
                 self.bus.publish(CommandEvent(word=KEY_COMMANDS[ev.key], confidence=1.0))
+            elif ev.key in KEY_ANSWERS:
+                self.bus.publish(AnswerEvent(correct=KEY_ANSWERS[ev.key]))
             elif ev.key in ("plus", "=", "]"):
                 self._knob += 1
             elif ev.key in ("minus", "-", "["):

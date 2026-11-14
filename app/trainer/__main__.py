@@ -15,34 +15,74 @@ from .core.config import load
 from .core.event_bus import EventBus
 from .game.engine import GameEngine
 from .game.level import LevelCatalog
+from .quiz.question import QuestionBank
 from .hardware.keyboard_input import KeyboardInput
 from .hardware.mcu_link import McuLink
 from .hardware.remote_input import RemoteInput
 from .system.metrics_logger import MetricsLogger
 from .system.power_manager import PowerManager
 from .ui.renderer import Renderer
-from .voice.voice_service import VoiceService, build_recognizer
+from .voice.voice_service import (
+    VoiceService,
+    build_answer_recognizer,
+    build_evaluator,
+    build_interpreter,
+    build_recognizer,
+    build_sentence_recognizer,
+    build_treatment_interpreter,
+    command_phrases,
+)
+
+log = logging.getLogger(__name__)
+
+
+def load_questions(cfg) -> QuestionBank:
+    """The quiz questions, or none when the quiz is off or the file is unusable."""
+    if not cfg.quiz.enabled:
+        return QuestionBank()
+    try:
+        return QuestionBank.load(cfg.quiz.questions_file)
+    except (OSError, ValueError, KeyError) as exc:
+        log.error("no quiz questions (%s); the quiz is off", exc)
+        return QuestionBank()
 
 
 def build_app(cfg, *, mcu: bool, voice: bool, sound: bool, keyboard: bool, display: bool) -> App:
     bus = EventBus()
     app = App(bus)
     levels = LevelCatalog(cfg.levels_dir)
-    app.register(GameEngine(bus, cfg.game, levels, cfg.display.width, cfg.display.height))
+    questions = load_questions(cfg)
+    app.register(GameEngine(bus, cfg.game, levels, cfg.display.width, cfg.display.height, cfg.quiz, questions, cfg.vitals))
     if display:
         app.register(Renderer(bus, cfg.display))
     if keyboard:
         app.register(KeyboardInput(bus))
     if mcu:
-        app.register(McuLink(bus, cfg.mcu, cfg.game.alarm_ms))
+        app.register(McuLink(bus, cfg.mcu))
     if cfg.remote.enabled:
         app.register(RemoteInput(bus, cfg.remote))
     if sound:
         app.register(SoundService(bus, cfg.audio))
     if voice:
-        service = VoiceService(bus, cfg.voice, cfg.commands)
-        service.recognizer = build_recognizer(cfg.voice, service.matcher.phrases())
-        app.register(service)
+        sentence = build_sentence_recognizer(cfg.voice, cfg.treatments)
+        phrases = command_phrases(cfg.commands, cfg.treatments, sentence_path=sentence is not None)
+        interpreter = build_interpreter(cfg.voice, phrases)
+        recognizer = build_recognizer(cfg.voice, interpreter.phrases())
+        app.register(
+            VoiceService(
+                bus,
+                cfg.voice,
+                phrases,
+                recognizer=recognizer,
+                interpreter=interpreter,
+                questions=questions,
+                answer_recognizer=build_answer_recognizer(cfg.voice, questions),
+                evaluator=build_evaluator(cfg.voice),
+                treatments=cfg.treatments,
+                sentence_recognizer=sentence,
+                treatment_interpreter=build_treatment_interpreter(cfg.voice, cfg.treatments) if sentence is not None else None,
+            )
+        )
     app.register(PowerManager(bus, cfg.system, cfg.game.deadzone_g))
     app.register(MetricsLogger(bus, cfg.system))
     return app

@@ -22,5 +22,8 @@
       ],
       "needs": "forceps"
     }
-  ]
+  ],
+  "quiz": {
+    "count": 0
+  }
 }

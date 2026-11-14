@@ -1,6 +1,6 @@
 {
   "name": "Bleeding",
-  "time_limit_s": 55,
+  "time_limit_s": 65,
   "start": [
     90,
     480
@@ -31,5 +31,17 @@
       ],
       "needs": "forceps"
     }
-  ]
+  ],
+  "quiz": {
+    "count": 1,
+    "topics": [
+      "instruments"
+    ]
+  },
+  "vitals": {
+    "episodes": 1,
+    "kinds": [
+      "spo2"
+    ]
+  }
 }

@@ -22,6 +22,7 @@ from ..core.events import (
     InputFrame,
     KeyEvent,
     QuitRequest,
+    Subtitle,
     VoiceState,
     VoiceStateChanged,
 )
@@ -71,6 +72,7 @@ class Renderer(Service):
         bus.subscribe(IdleChanged, self._on_idle)
         bus.subscribe(AsrDebugEvent, self._on_asr_debug)
         bus.subscribe(InputFrame, self._on_frame)
+        bus.subscribe(Subtitle, self._on_subtitle)
 
     # --- lifecycle -----------------------------------------------------------
 
@@ -126,6 +128,10 @@ class Renderer(Service):
 
     def _on_voice(self, ev: VoiceStateChanged) -> None:
         self.voice = ev.state
+
+    def _on_subtitle(self, ev: Subtitle) -> None:
+        if self.hud is not None:
+            self.hud.console.show(ev.text, time.monotonic())
 
     def _on_idle(self, ev: IdleChanged) -> None:
         self.idle = ev.idle
@@ -184,6 +190,9 @@ class Renderer(Service):
     ASR_PANEL_W = 300
     ASR_OUTCOME_COLOURS = {
         "command": theme.GOOD,
+        "answer_correct": theme.GOOD,
+        "answer_wrong": theme.BAD,
+        "unclear": theme.WARN,
         "low_confidence": theme.WARN,
         "no_match": theme.MUTED,
         "empty": theme.MUTED,

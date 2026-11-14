@@ -42,6 +42,10 @@ class Fonts:
             self._cache[key] = surface
         return surface
 
+    def width(self, name: str, text: str) -> int:
+        """Width of the text in pixels, without rendering it."""
+        return self._fonts[name].size(text)[0]
+
     def draw(self, target: pygame.Surface, name: str, text: str, colour, pos, anchor: str = "topleft") -> pygame.Rect:
         """Blit text with `anchor` (a pygame.Rect attribute name) at `pos`."""
         surface = self.text(name, text, colour)

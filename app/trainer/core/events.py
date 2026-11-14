@@ -95,10 +95,12 @@ class McuStatus(Event):
 
 @dataclass(kw_only=True)
 class CommandEvent(Event):
-    """A recognised command word with its confidence (0..1)."""
+    """A recognised command word with its confidence (0..1). For the nurse's
+    orders also the amount said (FiO2 %, mg, micrograms); None = standard dose."""
 
     word: str
     confidence: float = 1.0
+    amount: float | None = None
     speech_end_t: float | None = None  # when the speaker stopped, for latency
 
 
@@ -106,7 +108,7 @@ class CommandEvent(Event):
 class MisheardEvent(Event):
     """Speech was detected but no command matched well enough."""
 
-    reason: str = "no_match"  # "no_match" | "low_confidence"
+    reason: str = "no_match"  # "no_match" | "low_confidence" | "no_instruction" (a sentence with no treatment during an alarm)
     speech_end_t: float | None = None
 
 
@@ -136,6 +138,37 @@ class ListenRequest(Event):
     on: bool
 
 
+@dataclass(kw_only=True)
+class QuestionAsked(Event):
+    """Game -> voice: from now on, speech is the answer to this question."""
+
+    question_id: str
+
+
+@dataclass(kw_only=True)
+class InstructionWindow(Event):
+    """Game -> voice: an alarm is open (or closed); the nurse waits for a treatment.
+    While it is open, sentences go to Needle and a sentence without a treatment gets "Pardon, doctor?"."""
+
+    open: bool
+
+
+@dataclass(kw_only=True)
+class QuestionClosed(Event):
+    """Game -> voice: the question is over; speech is commands again."""
+
+
+@dataclass(kw_only=True)
+class AnswerEvent(Event):
+    """Voice -> game: the verdict on a spoken answer. Never the words themselves."""
+
+    question_id: str = ""  # "" means the question that is open right now (keyboard)
+    correct: bool = False
+    unclear: bool = False  # the answer named no single option
+    confidence: float = 1.0
+    speech_end_t: float | None = None
+
+
 # --- Game -> sound / display -------------------------------------------------
 
 
@@ -143,7 +176,9 @@ class ListenRequest(Event):
 class GameEvent(Event):
     """Something happened in the game. `kind` selects the patient line."""
 
-    kind: str  # hit, item_out, win, lose, pardon, help, wrong_tool, bleed_timeout, tool_changed, repeat, ...
+    # hit, item_out, win, lose, pardon, help, wrong_tool, bleed_timeout, tool_changed, repeat,
+    # question, quiz_correct, quiz_wrong, quiz_timeout (detail: the question id), ...
+    kind: str
     detail: str = ""
 
 
@@ -157,6 +192,20 @@ class RoundResult(Event):
     calls_correct: int
     calls_wrong: int
     steady_uses: int
+    questions_correct: int = 0
+    questions_wrong: int = 0
+    treatments_correct: int = 0  # orders that brought the value in trouble back into its band
+    treatments_wrong: int = 0  # overdoses, wrong drugs and unneeded ones
+    overdoses: int = 0
+    crises: int = 0  # a vital stayed critical and cost a life
+
+
+@dataclass(kw_only=True)
+class Subtitle(Event):
+    """A spoken line as text, for the screen (the game's own lines, never what a player said)."""
+
+    speaker: str  # "nurse" | "patient"
+    text: str
 
 
 @dataclass(kw_only=True)
@@ -204,6 +253,20 @@ class TargetView:
 
 
 @dataclass(kw_only=True)
+class VitalView:
+    """One tile of the vitals monitor."""
+
+    key: str  # "spo2" | "bis" | "bp"
+    label: str
+    value: int
+    unit: str
+    status: str  # "normal" | "alarm" | "critical"
+    trend: int  # -1, 0, +1
+    dose_card: str = ""  # what 10 units of its drug do, e.g. "10 mg: −6"
+    setting: str = ""  # the oxygen setting on the SpO2 tile, e.g. "FiO2 55%"
+
+
+@dataclass(kw_only=True)
 class GameSnapshot(Event):
     """Everything the renderer needs to draw one frame, published every tick."""
 
@@ -236,3 +299,11 @@ class GameSnapshot(Event):
     sensitivity_range: tuple[float, float] = (0.3, 2.0)
     tool_radius: int = 9
     light_left: float = 0.0  # seconds of light remaining
+    question_text: str = ""  # the open quiz question, "" if none
+    question_left: float = 0.0  # 0..1 of the answer window remaining
+    stress: int = 0  # 0..max_stress, raised by wrong answers
+    nurse_selection: str = ""  # co-op: the instrument the assistant has ready
+    max_stress: int = 3
+    crises: int = 0  # lives lost on the vitals monitor; lives left = max_contacts - contacts - crises
+    vitals: list[VitalView] = field(default_factory=list)  # empty: this level has no vitals monitor
+    vitals_alarm: bool = False  # a value waits for an instruction

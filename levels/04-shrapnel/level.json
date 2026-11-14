@@ -1,0 +1,60 @@
+{
+  "name": "Shrapnel",
+  "time_limit_s": 65,
+  "start": [
+    80,
+    480
+  ],
+  "targets": [
+    {
+      "id": "glass",
+      "position": [
+        250,
+        140
+      ],
+      "needs": "forceps"
+    },
+    {
+      "id": "blood",
+      "position": [
+        430,
+        480
+      ],
+      "needs": "swab"
+    },
+    {
+      "id": "needle",
+      "position": [
+        610,
+        140
+      ],
+      "needs": "forceps"
+    },
+    {
+      "id": "shard",
+      "position": [
+        790,
+        480
+      ],
+      "needs": "forceps"
+    },
+    {
+      "id": "splinter",
+      "position": [
+        950,
+        400
+      ],
+      "needs": "forceps"
+    }
+  ],
+  "quiz": {
+    "count": 2
+  },
+  "vitals": {
+    "episodes": 2,
+    "kinds": [
+      "bis",
+      "spo2"
+    ]
+  }
+}

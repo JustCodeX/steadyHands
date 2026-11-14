@@ -8,3 +8,4 @@ Evidence and material for the demo. The [criteria check](../PLAN.md#hackathon-cr
 | `tests.md` | Test runs: 10 demo runs in a row, voice command tests, misheard-speech tests |
 | `demo-script.md` | The 2-minute demo, rehearsed |
 | `pitch/` | Pitch slides |
+| `needle-integration.md` | The optional Cactus models (Needle, Whistle): what they do here, how to switch them on, and what to measure first |

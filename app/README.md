@@ -10,14 +10,16 @@ Every feature is a class derived from `Service`. Services are registered with `A
 | --- | --- |
 | `trainer/core/` | `App`, `Service`, `EventBus`, the event dataclasses, `config.py` (every setting, TOML overrides) |
 | `trainer/hardware/` | `McuLink` (Bridge client), `KeyboardInput` (dev mode and demo fallback) |
-| `trainer/voice/` | `AudioInput`, `SignalProcessor` (high-pass, level normalisation), `EnergyVad` + `Segmenter`, `SpeechRecognizer` → `VoskRecognizer` / `NullRecognizer`, `CommandMatcher`, `VoiceService` |
+| `trainer/voice/` | `AudioInput`, `SignalProcessor` (high-pass, level normalisation), `EnergyVad` + `Segmenter`, `SpeechRecognizer` → `VoskRecognizer` / `EnsembleRecognizer` / `NullRecognizer`, `CommandInterpreter` → `CommandMatcher`, `OrderInterpreter` → `NamedOrders`, `CommandUnderstanding` (older commands on the grammar, orders through the sentence path), `VoiceService` |
+| `trainer/cactus_models/` | Optional, needs `cactus-compute`: `NeedleAgent`, `NeedleOrders` (the nurse's orders: drug and amount), `NeedleEvaluator` (quiz), `WhistleRecognizer` (switched on with `cactus.toml`, see [docs/needle-integration.md](../docs/needle-integration.md)) |
+| `trainer/quiz/` | `Question` + `QuestionBank` (`assets/questions.json`), `AnswerEvaluator` → `KeywordEvaluator` |
 | `trainer/audio/` | `lines.py` (every spoken line), `ClipLibrary`, `PhraseBuilder`, `SoundService`, `TtsRenderer` (setup only) |
-| `trainer/game/` | `GameEngine`, `GameState`, `SoloMode` / `CoopMode`, `Level` + `LevelCatalog`, `CollisionMap`, `Patient`, `TrainingMetrics` |
+| `trainer/game/` | `GameEngine`, `GameState`, `SoloMode` / `CoopMode`, `Level` + `LevelCatalog`, `CollisionMap`, `Patient`, `TrainingMetrics`, `VitalsMonitor` (vital signs, episodes, the dose model), `QuizDirector` (when to ask, answer window), `Stress`, `ActionCatalog` (the commands as tool schemas) |
 | `trainer/game/instruments/` | `Instrument` and `Forceps`, `Swab`, `Clamp`, `Scalpel` |
-| `trainer/ui/` | `Renderer` (picks the screen), `MenuScreen`, `RoundView`, `Hud`, `PauseOverlay`, `ResultScreen`, `MapPainter` (level mask → wound picture), `Fonts`, `theme.py` |
+| `trainer/ui/` | `Renderer` (picks the screen), `MenuScreen`, `RoundView`, `Hud`, `VitalsConsole` (monitor tiles with dose cards, FiO2, the nurse's subtitle), `PauseOverlay`, `ResultScreen`, `MapPainter` (level mask → wound picture), `Fonts`, `theme.py` |
 | `trainer/ui/art/` | Artwork drawn with code and cached: `InstrumentArt`, `TargetArt`, `PatientArt`, `Glyphs`, `Backdrop`, `canvas.py` (drawing helpers) |
 | `trainer/system/` | `PowerManager` (idle mode), `MetricsLogger` (latency, CPU, RAM per state → `logs/metrics.csv`) |
-| `tools/` | `make_levels.py`, `render_clips.py`, `bridge_probe.py`, `sync_to_board.sh` |
+| `tools/` | `make_levels.py`, `render_clips.py`, `bridge_probe.py`, `sync_to_board.sh`, `needle_eval.py` (checks Needle rungs against `tests/data/needle_cases.json`), `voice_drive.py` (plays synthetic speech through the real voice path) |
 | `setup/` | `board_setup.sh`, `download_models.sh` |
 | `tests/` | pytest suite, runs headless on any computer |
 
@@ -32,7 +34,7 @@ cd ~/promptpimps-unoq/app
 setup/board_setup.sh       # apt packages (sudo), autologin for :0, venv, models, levels, clips
 ```
 
-The setup needs the board password once (for `apt`, the autologin file, and the USB host-mode service). The board's USB-C port falls back to device mode, which disconnects the hub's USB devices (headset, touch); USB adb does the same, so adbd is disabled and a small root service keeps the port in host mode. Use SSH (`BOARD_SSH`) instead of USB adb on a board set up this way. It downloads the Vosk small English model (40 MB) and the Piper voice (60 MB) into `app/models/` (git-ignored) and renders every patient line to `assets/clips/` once. Nothing is downloaded or synthesised during play.
+The setup needs the board password once (for `apt`, the autologin file, and the USB host-mode service). The board's USB-C port falls back to device mode, which disconnects the hub's USB devices (headset, touch); USB adb does the same, so adbd is disabled and a small root service keeps the port in host mode. The same service restarts the port when the hub fails to connect the headset or the touch panel at boot (see [the cheat sheet](../docs/board-cheatsheet.md#no-sound-in-the-headset)). Use SSH (`BOARD_SSH`) instead of USB adb on a board set up this way. It downloads the Vosk small English model (40 MB) and the Piper voice (60 MB) into `app/models/` (git-ignored) and renders every patient line to `assets/clips/` once. Nothing is downloaded or synthesised during play.
 
 ## Running
 
@@ -46,11 +48,11 @@ python -m trainer --no-mcu --no-voice --windowed   # on a laptop: keyboard only
 
 Controls without voice: tilt moves, the knob picks the instrument (while paused it sets the steering speed), a knob press switches on the light in dark zones, A uses the instrument, B pauses, C also steps to the next instrument.
 
-Keyboard: arrows tilt (Shift = slow), Space = A, M = B, C = C, +/- turn the knob, Enter presses it. As if spoken: 1-4 call tools, L light, S steady, X cancel, R repeat, H help, N new game. Esc quits.
+Keyboard: arrows tilt (Shift = slow), Space = A, M = B, C = C, +/- turn the knob, Enter presses it. As if spoken: 1-4 call tools, 5-7 order oxygen, propofol, adrenaline at the standard dose, L light, S steady, X cancel, R repeat, H help, N new game. Y and U answer the open quiz question right and wrong. Esc quits.
 
-Settings: copy the defaults from `trainer/core/config.py` into a TOML file and pass `--config file.toml` (or set `STEADYHANDS_CONFIG`). Typical overrides: `voice.input_device = "USB"`, `audio.output_device`, `game.speed_px_per_s`, `voice.confidence_threshold`, `mcu.feedback = true` (once the horn and red LED are wired).
+Settings: copy the defaults from `trainer/core/config.py` into a TOML file and pass `--config file.toml` (or set `STEADYHANDS_CONFIG`). Typical overrides: `voice.input_device = ""` (default input instead of the USB headset), `audio.output_device`, `game.speed_px_per_s`, `voice.confidence_threshold`, `mcu.tool_leds = true` (show the active tool on the Modulino Buttons LEDs).
 
-Wall contact plays a generated buzz through the audio output (`trainer/audio/sound_service.py`, `make_buzz_bytes`). The MCU horn and LED are off unless `mcu.feedback` is `true`.
+Wall contact plays a generated buzz through the audio output (`trainer/audio/sound_service.py`, `make_buzz_bytes`).
 
 ## Tests
 
@@ -61,5 +63,5 @@ cd app && python -m pytest        # headless: SDL dummy drivers are set in tests
 ## M0 checks on the board
 
 ```sh
-app/.venv/bin/python app/tools/bridge_probe.py 5    # frames/s from the MCU, then alarm/LED/voice-state test
+app/.venv/bin/python app/tools/bridge_probe.py 5    # frames/s from the MCU, then button-LED and voice-state test
 ```

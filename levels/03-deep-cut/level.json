@@ -1,6 +1,6 @@
 {
   "name": "Deep cut",
-  "time_limit_s": 50,
+  "time_limit_s": 60,
   "start": [
     80,
     150
@@ -47,5 +47,19 @@
       300,
       170
     ]
-  ]
+  ],
+  "quiz": {
+    "count": 2,
+    "topics": [
+      "instruments",
+      "room"
+    ]
+  },
+  "vitals": {
+    "episodes": 2,
+    "kinds": [
+      "spo2",
+      "bp"
+    ]
+  }
 }

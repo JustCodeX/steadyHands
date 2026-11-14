@@ -2,6 +2,8 @@
 
 Left to right: the patient's face and lives, the clock, the instrument tray
 (the knob picks from it), the list of things still to treat, and the mic.
+Along the bottom edge: the vitals console (VitalsConsole) with the nurse's
+subtitle, or, in a level without the monitor, an open quiz question.
 """
 from __future__ import annotations
 
@@ -16,6 +18,7 @@ from .art.instrument_art import InstrumentArt
 from .art.patient_art import PatientArt
 from .art.target_art import TargetArt
 from .fonts import Fonts
+from .vitals_console import VitalsConsole
 
 LIFE = (244, 92, 110)
 
@@ -36,6 +39,7 @@ class Hud:
         self._dim: dict[str, pygame.Surface] = {}
         self._task_icons: dict[tuple[str, str], pygame.Surface] = {}
         self._panel = self._make_panel()
+        self.console = VitalsConsole(width, fonts)
 
     def _make_panel(self) -> pygame.Surface:
         h = theme.HUD_HEIGHT
@@ -52,19 +56,27 @@ class Hud:
         self._tray(surface, snap, t)
         self._tasks(surface, snap)
         self._status(surface, snap, voice, t)
+        if self.console.wanted(snap, t):
+            self.console.draw(surface, snap, t, self._wrap)
+        else:
+            self._question(surface, snap)
 
     # --- parts -----------------------------------------------------------------
 
     def _patient(self, surface: pygame.Surface, snap: GameSnapshot, t: float, shaken: bool) -> None:
-        mood = self.patient.mood_for(snap.contacts, snap.max_contacts)
+        lost = snap.contacts + snap.crises  # a crisis on the monitor costs a life like a wall contact
+        mood = self.patient.mood_for(lost, snap.max_contacts)
         dx = int(3 * math.sin(t * 60)) if shaken else 0
         surface.blit(self.patient.face(mood, 50), (5 + dx, 3))
         for i in range(snap.max_contacts):
-            alive = i >= snap.contacts
+            alive = i >= lost
             self._heart(surface, 74 + i * 25, 18, 10, LIFE if alive else theme.PANEL_LINE)
         rate = snap.heart_rate
         colour = theme.GOOD if rate < 100 else theme.WARN if rate < 130 else theme.BAD
-        self.fonts.draw(surface, "small", f"{rate} bpm", colour, (63, 31))
+        bpm = self.fonts.draw(surface, "small", f"{rate} bpm", colour, (63, 31))
+        for i in range(snap.stress):  # one arrow per stress level
+            x = bpm.right + 5 + i * 9
+            pygame.draw.polygon(surface, theme.BAD, [(x, 46), (x + 4, 36), (x + 8, 46)])
 
     def _clock(self, surface: pygame.Surface, snap: GameSnapshot, t: float) -> None:
         secs = int(math.ceil(snap.time_left))
@@ -91,8 +103,46 @@ class Hud:
                 if word == wanted and int(t * 4) % 2 == 0:  # the tool the target under the instrument needs
                     pygame.draw.rect(surface, theme.WARN, rect, 3, border_radius=10)
                 surface.blit(self._dimmed(word), (rect.x + 3, rect.y + 2))
+            if word == snap.nurse_selection:  # co-op: what the assistant has ready to hand over
+                called = word == snap.pending_call
+                mark = theme.GOOD if called else theme.ACCENT
+                pygame.draw.rect(surface, mark, rect.inflate(6, 6), 3, border_radius=12)
+                pygame.draw.polygon(surface, mark, [(rect.centerx - 7, rect.bottom + 5), (rect.centerx + 7, rect.bottom + 5), (rect.centerx, rect.bottom - 2)])
+            elif word == snap.pending_call and int(t * 4) % 2 == 0:  # co-op: the surgeon called this one
+                pygame.draw.rect(surface, theme.WARN, rect, 3, border_radius=10)
         name_x = self.TRAY_X + len(snap.tools) * (self.SLOT_W + self.SLOT_GAP) + 4
         self.fonts.draw(surface, "label", snap.tool.capitalize(), theme.TARGET_COLOURS.get(snap.tool, theme.TEXT), (name_x, 28), anchor="midleft")
+
+    def _question(self, surface: pygame.Surface, snap: GameSnapshot) -> None:
+        """The open quiz question and the time left to answer it."""
+        if not snap.question_text:
+            return
+        lines = self._wrap("body", snap.question_text, self.width - 130)
+        texts = [self.fonts.text("body", line, theme.TEXT) for line in lines]
+        box = pygame.Rect(0, 0, max(t.get_width() for t in texts) + 86, 26 * len(texts) + 26)
+        box.midbottom = (self.width // 2, surface.get_height() - 6)
+        pygame.draw.rect(surface, theme.PANEL, box, border_radius=16)
+        pygame.draw.rect(surface, theme.ACCENT, box, 3, border_radius=16)
+        pygame.draw.circle(surface, theme.ACCENT, (box.x + 30, box.centery - 3), 15)
+        self.fonts.draw(surface, "head", "?", theme.PANEL, (box.x + 30, box.centery - 3), anchor="center")
+        for i, text in enumerate(texts):
+            surface.blit(text, (box.x + 58, box.y + 8 + 26 * i))
+        left = max(0.0, min(1.0, snap.question_left))
+        colour = theme.GOOD if left > 0.5 else theme.WARN if left > 0.25 else theme.BAD
+        track = pygame.Rect(box.x + 58, box.bottom - 13, box.w - 76, 5)
+        pygame.draw.rect(surface, theme.PANEL_LINE, track, border_radius=3)
+        pygame.draw.rect(surface, colour, (track.x, track.y, int(track.w * left), track.h), border_radius=3)
+
+    def _wrap(self, font: str, text: str, width: int) -> list[str]:
+        lines, line = [], ""
+        for word in text.split():
+            longer = f"{line} {word}".strip()
+            if line and self.fonts.width(font, longer) > width:
+                lines.append(line)
+                line = word
+            else:
+                line = longer
+        return lines + [line]
 
     def _dimmed(self, word: str) -> pygame.Surface:
         if word not in self._dim:
@@ -133,7 +183,7 @@ class Hud:
         if voice is not VoiceState.OFF:
             self.mic_icon(surface, self.width - 28, 28, voice, t)
             right = self.width - 54
-            heard = f"call-back: {snap.pending_call}?" if snap.pending_call else snap.last_command
+            heard = f"called: {snap.pending_call}" if snap.pending_call else snap.last_command
             if heard:
                 self.fonts.draw(surface, "small", heard, theme.WARN if heard == "?" else theme.ACCENT, (right, 18), anchor="midright")
             notes = [snap.mode] if snap.mode != "solo" else []

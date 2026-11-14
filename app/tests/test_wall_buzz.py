@@ -1,4 +1,4 @@
-"""The wall-contact buzz plays in the game; the MCU horn and LED stay silent unless wired."""
+"""The wall-contact buzz plays in the game; the MCU only shows the tool on the button LEDs when asked."""
 import array
 
 from trainer.audio.clip_library import ClipLibrary
@@ -42,19 +42,25 @@ def test_other_events_do_not_buzz(tmp_path, monkeypatch):
     assert all(SFX_BUZZ not in ids for ids, _ in calls)
 
 
-def test_mcu_horn_and_leds_are_off_by_default(monkeypatch):
-    link = McuLink(EventBus(), McuConfig(), alarm_ms=350)
-    fired = []
-    monkeypatch.setattr(link, "alarm", lambda ms: fired.append(("alarm", ms)))
-    monkeypatch.setattr(link, "set_leds", lambda mask: fired.append(("leds", mask)))
+def _captured_notifies(monkeypatch, cfg):
+    link = McuLink(EventBus(), cfg)
+    sent = []
+    monkeypatch.setattr(link, "_notify", lambda method, *args: sent.append((method, *args)))
+    return link, sent
+
+
+def test_mcu_gets_no_command_for_game_events_by_default(monkeypatch):
+    link, sent = _captured_notifies(monkeypatch, McuConfig())
     link._on_game_event(GameEvent(kind="hit"))
+    link._on_game_event(GameEvent(kind="bleed_timeout"))
     link._on_game_event(GameEvent(kind="tool_changed", detail="swab"))
-    assert fired == []
+    assert sent == []
 
 
-def test_mcu_horn_fires_when_feedback_is_switched_on(monkeypatch):
-    link = McuLink(EventBus(), McuConfig(feedback=True), alarm_ms=350)
-    fired = []
-    monkeypatch.setattr(link, "alarm", lambda ms: fired.append(ms))
+def test_tool_leds_show_the_tool_and_a_wall_contact_sends_nothing(monkeypatch):
+    link, sent = _captured_notifies(monkeypatch, McuConfig(tool_leds=True))
     link._on_game_event(GameEvent(kind="hit"))
-    assert fired == [350]
+    assert sent == []  # a wall contact sends nothing to the MCU
+    link._on_game_event(GameEvent(kind="tool_changed", detail="swab"))
+    link._on_game_event(GameEvent(kind="win"))
+    assert sent == [("leds", 0b010), ("leds", 0)]

@@ -8,18 +8,20 @@ import time
 from collections import deque
 
 from ..core.config import AudioConfig, TOOL_WORDS
-from ..core.events import GameEvent, PlaybackFinished, PlaybackStarted, RoundResult
+from ..core.events import GameEvent, PlaybackFinished, PlaybackStarted, RoundResult, Subtitle
 from ..core.service import Service
+from ..voice.audio_input import read_sound_cards, usb_sound_card_present
 from .clip_library import ClipLibrary
+from .lines import line_text
 from .phrase_builder import PhraseBuilder
 
 log = logging.getLogger(__name__)
 
 # Lines that interrupt whatever is playing.
-URGENT = {"hit", "bleed_timeout", "win", "lose", "pardon"}
+URGENT = {"hit", "bleed_timeout", "win", "lose", "pardon", "vital_alarm", "vital_over", "vital_reminder", "vital_crisis"}
 # Lines the result sentence makes redundant.
 QUIET_KINDS = {"menu", "paused", "resumed", "round_started"}
-# Game events that also get the buzz, the in-game replacement for the MCU horn.
+# Game events that also get the buzz.
 BUZZ_KINDS = {"hit"}
 # Queue id of the generated buzz. Not a clip file: see make_buzz_bytes().
 SFX_BUZZ = "sfx_buzz"
@@ -71,6 +73,12 @@ class SoundService(Service):
             self._buzz = pygame.mixer.Sound(buffer=make_buzz_bytes())
             self._ready = True
             log.info("audio out ready; %d clips in %s", self.clips.count(), self.clips.clips_dir)
+            if usb_sound_card_present(read_sound_cards()) is False:
+                # The mixer opens fine on the built-in card, so say it out loud.
+                log.warning(
+                    "no USB headset on the bus; sound goes to the board's line-out "
+                    "(see docs/board-cheatsheet.md, 'No sound in the headset')"
+                )
         except pygame.error as exc:
             log.error("no audio output (%s); sound disabled", exc)
 
@@ -142,6 +150,10 @@ class SoundService(Service):
             return
         if ev.kind == "hit":
             self._variant += 1
+        nurse = self.phrases.nurse(ev.kind, ev.detail)
+        if nurse:
+            # headset audio reaches only the wearer (open point D4): the room reads along
+            self.bus.publish(Subtitle(speaker="nurse", text=line_text(nurse)))
         ids = self.phrases.for_event(ev.kind, ev.detail, self._variant)
         if ev.kind in BUZZ_KINDS and ids:
             ids = [SFX_BUZZ] + ids

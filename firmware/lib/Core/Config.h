@@ -1,19 +1,9 @@
-// Every tunable of the firmware in one place. Pins follow WIRING.md.
+// Every tunable of the firmware in one place.
 #pragma once
 #include <stdint.h>
 
 namespace sh {
 namespace cfg {
-
-// --- Pins (UNO Q header numbering) ---
-constexpr uint8_t PIN_RED_LED = 6;  // D6 via 330 ohm
-constexpr uint8_t PIN_HORN = 10;    // D10 via NPN driver
-
-// --- Horn ---
-// false: active buzzer, switched on/off. true: passive piezo, driven with tone().
-constexpr bool HORN_PASSIVE = false;
-constexpr uint16_t HORN_TONE_HZ = 2000;
-constexpr uint16_t ALARM_MAX_MS = 3000;  // ignore longer requests (safety)
 
 // --- On-board RGB LED 4 for the voice state ---
 // Set to true if the colours look inverted (LED on when it should be off).
@@ -46,11 +36,10 @@ constexpr float TILT_CLAMP_G = 1.0f;
 constexpr uint8_t CONTROL_MODE = SH_CONTROL_MODE;
 
 // --- Position control (CONTROL_MODE 2) ---
-// Both Modulino Distance modules hang on the Qwiic chain. They ship fixed to
-// 0x29, so sensor X's XSHUT pad goes to PIN_TOF_XSHUT: holding it low at
-// start-up lets the firmware move sensor Y to POS_ADDR_Y first.
-// Preferred set-up, no wiring at all: a Modulino Hub (TCA9548A) in the chain
-// gives each module its own channel, so both keep 0x29. Detected at run time.
+// Both Modulino Distance modules hang on the Qwiic chain and ship fixed to
+// 0x29, so they have to be told apart. Preferred, with no wiring at all: a
+// Modulino Hub (TCA9548A) in the chain gives each module its own channel and
+// both keep 0x29. Detected at run time.
 constexpr uint8_t POS_HUB_ADDR = 0x70;  // hub default; jumpers allow 0x70-0x77
 constexpr uint8_t POS_HUB_CH_X = 0;     // hub port for the left-wall sensor
 constexpr uint8_t POS_HUB_CH_Y = 1;     // hub port for the top-wall sensor
@@ -64,13 +53,12 @@ constexpr bool POS_USE_XSHUT = false;  // true once the XSHUT wire is fitted
 constexpr uint8_t PIN_TOF_XSHUT = 4;   // D4 -> XSHUT pad of the X module
 constexpr uint16_t POS_MIN_MM = 40;   // maps to the left/top edge
 constexpr uint16_t POS_MAX_MM = 400;  // maps to the right/bottom edge
-// The chips are accurate but noisy by a few mm, which the absolute mapping
-// turns into visible jitter. A median of POS_MEDIAN samples kills single
-// spikes, and the held position only follows once the hand has really moved
-// POS_DEADBAND_MM, so the tool sits perfectly still between moves.
 // true when the module aimed at the left wall is the one on 0x29, i.e. when
 // screen X and screen Y come out the wrong way round.
 constexpr bool POS_SWAP_AXES = true;
+// The chips are accurate but noisy by a few mm. A median of POS_MEDIAN samples
+// kills single spikes, and the held position trails the reading by
+// POS_DEADBAND_MM, so the tool sits perfectly still between moves.
 constexpr uint8_t POS_MEDIAN = 5;
 constexpr uint16_t POS_DEADBAND_MM = 6;
 constexpr float POS_CUTOFF_HZ = 6.0f;  // output smoothing
@@ -100,7 +88,6 @@ constexpr uint32_t I2C_CLOCK_HZ = 100000;
 
 // --- Bridge method names (must match app/trainer/hardware/mcu_link.py) ---
 constexpr const char* RPC_INPUT = "input";
-constexpr const char* RPC_ALARM = "alarm";
 constexpr const char* RPC_LEDS = "leds";
 constexpr const char* RPC_VOICE_STATE = "voice_state";
 constexpr const char* RPC_PING = "ping";

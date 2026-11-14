@@ -16,11 +16,6 @@ Draft of 13 November 2026. Check every item marked ⚠ before the first power-on
 | Modulino Knob | 1 | |
 | Modulino Distance | 0–1 | Optional (stretch) |
 | Qwiic cables | 4 | One of them longer, about 30–50 cm, for the instrument |
-| Red LED + 330 Ω resistor | 1 | |
-| Horn | 1 | ⚠ Read the label: voltage, current, active or passive |
-| NPN transistor (2N2222, BC337) + 1 kΩ resistor | 1 | Horn driver, for up to about 30 mA. Above that, see [Horn](#horn). |
-| Diode 1N4148 or 1N4007 | 1 | Only for magnetic (coil) horns |
-| Breadboard, jumper wires | | |
 | PeakTech multimeter + USB breakout (male/female) | 1 | For [energy measurement](#energy-measurement-with-the-peaktech) |
 
 ## Overview
@@ -37,8 +32,6 @@ flowchart LR
   B -- "Qwiic" --> K["Modulino Knob"]
   K -- "Qwiic" --> DI["Modulino Distance (optional)"]
   DI -- "long Qwiic cable" --> M["Modulino Movement<br/>in the instrument"]
-  Q -- "D6 via 330 Ω" --> LED["Red LED"]
-  Q -- "D10 via transistor driver" --> HORN["Horn"]
 ```
 
 ## UNO Q pin assignment
@@ -47,52 +40,9 @@ flowchart LR
 | --- | --- | --- |
 | USB-C | Hub | The board's only USB port: power in, plus HDMI over DisplayPort Alt Mode, plus USB devices |
 | Qwiic | Modulino chain | I2C bus `Wire1`, 3.3 V. Not `Wire`. |
-| D6 (PWM) | Red LED via 330 Ω | About 4 mA at 3.3 V; PWM allows fading |
-| D10 (PWM) | Transistor base via 1 kΩ | Supports `tone()` for a passive horn |
-| 5V | Horn (+) | |
-| GND | LED cathode, transistor emitter | One shared ground for everything |
-| Reserved | D0/D1 (UART), D20/D21 (header I2C) | Keep free |
+| Header pins (D0–D21, 5V, GND) | Nothing | No wire goes to the headers |
 
 Logic level is **3.3 V**. Do not connect any 5 V signal to an input. All sensors go through Qwiic at 3.3 V, so this only matters for extra wiring.
-
-## Wiring diagram (pins)
-
-Every wire on the UNO Q headers and the Qwiic connector. The circuits are explained under [Red LED](#red-led) and [Horn](#horn).
-
-```mermaid
-flowchart LR
-  subgraph UNOQ["Arduino UNO Q"]
-    QW["Qwiic<br/>Wire1, 3.3 V"]
-    D6["D6 (PWM)"]
-    D10["D10 (PWM)"]
-    V5["5V"]
-    GND["GND"]
-  end
-  subgraph LEDC["Red LED circuit"]
-    R1["330 Ω"]
-    LED["Red LED<br/>anode → cathode"]
-  end
-  subgraph HORNC["Horn driver"]
-    R2["1 kΩ"]
-    Q1["NPN transistor<br/>2N2222 / BC337"]
-    HORN["Horn"]
-    DIO["Diode 1N4148<br/>across the horn, coil horns only<br/>cathode to 5V"]
-  end
-  subgraph CHAIN["Modulino chain"]
-    MB["Buttons"]
-    MK["Knob"]
-    MD["Distance<br/>(optional)"]
-    MM["Movement<br/>in the instrument"]
-  end
-  D6 --> R1 --> LED -- "cathode" --> GND
-  D10 --> R2 -- "base" --> Q1
-  V5 -- "+" --> HORN
-  HORN -- "− to collector" --> Q1
-  Q1 -- "emitter" --> GND
-  DIO -.- HORN
-  QW --> MB --> MK --> MD
-  MD == "long Qwiic cable" ==> MM
-```
 
 ## Modulino chain (Qwiic)
 
@@ -104,44 +54,6 @@ UNO Q [Qwiic] ── Buttons ── Knob ── Distance (optional) ══ long 
 - Different module types have different I2C addresses, so they can share the bus. Two modules of the **same** type need a different address; the library can change it.
 - The bus runs at 400 kHz by default. If the long cable causes errors, set `Wire1.setClock(100000)` before `Modulino.begin()`.
 - Library: `Arduino_Modulino` (the workshop uses 0.10.0).
-
-## Red LED
-
-```
-UNO Q D6 ──[ 330 Ω ]──►|── UNO Q GND
-                    red LED
-         (long leg = anode, towards the resistor)
-```
-
-## Horn
-
-> **Status:** not wired for now. The game plays the wall-contact buzz itself, and the MCU horn and LED stay off (`McuConfig.feedback = false`). The circuits below are for when the horn is wired.
-
-⚠ **Read the label first.** Which circuit fits depends on the horn:
-
-| Horn | Circuit |
-| --- | --- |
-| Active buzzer, 3–5 V, up to about 30 mA | NPN circuit below (on/off with `digitalWrite`) |
-| Passive piezo (no built-in oscillator) | NPN circuit below; set the pitch with `tone(9, frequency)` |
-| More than about 30 mA | Logic-level N-MOSFET that switches fully at 3.3 V on the gate (for example AO3400): gate through 100 Ω to D10, 100 kΩ from gate to GND |
-| 12 V or more | Separate power supply with shared GND, plus a MOSFET, or replace with a 5 V buzzer |
-
-```
-UNO Q 5V ───────────┬────────────────┐
-                    │                │
-                Horn (+)        Diode 1N4148/1N4007
-                Horn (−)        (stripe / cathode towards 5V)
-                    │                │
-                    ├────────────────┘
-                    │
-                    C
-UNO Q D10 ──[1 kΩ]── B    NPN (2N2222 / BC337)
-                    E
-                    │
-UNO Q GND ──────────┘
-```
-
-The diode is only needed for magnetic (coil) horns; it does no harm on a piezo. Never connect the horn directly to a pin: the MCU pins only deliver a few mA.
 
 ## Display, touch, audio
 
@@ -162,7 +74,7 @@ The diode is only needed for magnetic (coil) horns; it does no harm on a piezo. 
 | --- | --- | --- |
 | UNO Q | Up to 2.5 A peak at 5 V | UNO Q manual |
 | Elecrow 7" IPS-D | About 2.55 W | Elecrow wiki |
-| Headset, Modulinos, LED, horn | Unknown | To be measured |
+| Headset, Modulinos | Unknown | To be measured |
 
 ## Energy measurement with the PeakTech
 
@@ -185,10 +97,6 @@ A multimeter measures current only **in series**, so the circuit has to be broke
 
 ## Checklist before the first power-on
 
-- [ ] Horn label read; circuit chosen from the table
-- [ ] LED with resistor, polarity correct (long leg towards the resistor)
-- [ ] Transistor pins checked against its datasheet (pin order differs between 2N2222 and BC337 packages)
-- [ ] One shared GND for everything
-- [ ] No 5 V on any signal pin
+- [ ] Nothing connected to the header pins
 - [ ] Display model and power supply checked
 - [ ] Qwiic cables fully seated; long cable at the end of the chain

@@ -22,4 +22,29 @@ if [[ ! -f "$MODELS/piper/$VOICE.onnx" ]]; then
   curl -L --fail -o "$MODELS/piper/$VOICE.onnx" "$BASE/$VOICE.onnx"
   curl -L --fail -o "$MODELS/piper/$VOICE.onnx.json" "$BASE/$VOICE.onnx.json"
 fi
+# The nurse's own voice (vitals monitor). Without it her lines use the patient's voice.
+NURSE=en_GB-jenny_dioco-medium
+NURSE_BASE="https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/jenny_dioco/medium"
+if [[ ! -f "$MODELS/piper/$NURSE.onnx" ]]; then
+  echo "Downloading Piper voice $NURSE for the nurse (about 60 MB)"
+  curl -L --fail -o "$MODELS/piper/$NURSE.onnx" "$NURSE_BASE/$NURSE.onnx"
+  curl -L --fail -o "$MODELS/piper/$NURSE.onnx.json" "$NURSE_BASE/$NURSE.onnx.json"
+fi
+# Optional: the Cactus models (app/cactus.toml). WITH_CACTUS=1 setup/download_models.sh
+# Needs `pip install -r requirements-cactus.txt` in the app's venv first.
+if [[ "${WITH_CACTUS:-0}" == "1" ]]; then
+  PY="${PYTHON:-$APP_DIR/.venv/bin/python}"
+  # The runtime downloads its engine library on first use; the app runs it
+  # offline (HF_HUB_OFFLINE=1), so fetch the engine for this machine now.
+  CACTUS_TELEMETRY=0 "$PY" -m cactus fetch
+  if [[ ! -f "$MODELS/whistle.cact" ]]; then
+    echo "Downloading Whistle (about 17 MB)"
+    curl -L --fail -o "$MODELS/whistle.cact" "https://huggingface.co/Cactus-Compute/whistle/resolve/main/whistle.cact"
+  fi
+  if [[ ! -f "$MODELS/needle3-12L.cact" ]]; then
+    # A rung is built from the checkpoint with the training extras (JAX), on a
+    # laptop: cactus build needle3.safetensors --layers 12 --out needle3-12L.cact
+    echo "needle3-12L.cact is not downloadable: build it (docs/needle-integration.md) and copy it to $MODELS/"
+  fi
+fi
 echo "models ready in $MODELS"

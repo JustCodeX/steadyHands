@@ -14,7 +14,6 @@ bool BridgeLink::begin() {
   instance_ = this;
   started_ = Bridge.begin();
   if (!started_) return false;
-  Bridge.provide_safe(cfg::RPC_ALARM, rpcAlarm);
   Bridge.provide_safe(cfg::RPC_LEDS, rpcLeds);
   Bridge.provide_safe(cfg::RPC_VOICE_STATE, rpcVoiceState);
   Bridge.provide_safe(cfg::RPC_PING, rpcPing);
@@ -41,12 +40,6 @@ void BridgeLink::update(uint32_t nowMs) {
   if (nowMs - lastFrameMs_ < frameIntervalMs_) return;
   lastFrameMs_ = nowMs;
   sendFrame();
-}
-
-bool BridgeLink::rpcAlarm(int durationMs) {
-  if (!instance_ || durationMs < 0) return false;
-  instance_->alarm_.trigger(static_cast<uint16_t>(durationMs > 65535 ? 65535 : durationMs));
-  return true;
 }
 
 bool BridgeLink::rpcLeds(int mask) {
