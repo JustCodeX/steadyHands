@@ -95,12 +95,41 @@ The judging uses the Green Software Foundation's [Software Carbon Intensity](htt
 
 > SCI = (E × I + M) per R
 
-| Term | For Steady Hands | Status |
+**Result: about 0.07 to 0.12 g CO₂e per training round** (about 3 to 6 g per hour of practice). This is an **estimate from published figures**, not a measurement: our own power measurement is still open ([roadmap](../ROADMAP.md#2-measure-and-cut-the-energy-sci)). Where a figure was uncertain, the upper estimate takes the higher value.
+
+| Term | Value | Source |
 | --- | --- | --- |
-| R, functional unit | One training round of about 60 s, including the spoken feedback | Defined |
-| E, energy per round | Mean power of game board, remote and display during a round × round time | ⬜ Not measured yet: needs a USB-C power meter on each hub input ([method](../WIRING.md#energy-measurement-with-the-peaktech)) |
-| I, grid intensity | Location-based intensity of the German grid at the time of use | ⬜ To be filled in with the measurement |
-| M, embodied emissions | Share of the two boards, display and hub, spread over their expected lifetime in rounds | ⬜ Needs the manufacturers' footprint data |
+| R, functional unit | One training round: 75 s (the longest level time limit, 65 s, plus about 10 s of spoken result) | `levels/*/level.json`: 55–65 s |
+| I, grid intensity | 363 g CO₂/kWh, German electricity mix 2024 (location-based) | [Umweltbundesamt](https://www.umweltbundesamt.de/themen/co2-emissionen-pro-kilowattstunde-strom-2024) |
+| E, energy per round | 0.16 Wh (lower) to 0.31 Wh (upper): 7.7 to 14.8 W at the wall × 75 s | Power table below |
+| M, embodied emissions | 0.008 g per round: 2 boards × 6.5 kg CO₂e, spread over a 4-year life (M = TE × R / lifetime) | Raspberry Pi 5 cradle-to-grave footprint as a proxy for one UNO Q, a board of the same class ([Raspberry Pi](https://www.raspberrypi.com/news/sustainable-solutions-offsetting-our-carbon-footprint-with-enhanced-rock-weathering/), [Hackster](https://www.hackster.io/news/raspberry-pi-partners-with-undo-to-offset-the-carbon-emissions-of-its-single-board-computers-45cea017df66)) |
+
+Power during a round, by part (W, DC):
+
+| Part | Lower | Upper | Basis |
+| --- | --- | --- | --- |
+| Game board UNO Q, full load (game, voice, models) | 3.0 | 5.0 | Reviews: 2–3 W ([Jeff Geerling](https://www.jeffgeerling.com/blog/2025/arduino-uno-q-weird-hybrid-sbc)), 4.5 W ([Tom's Hardware](https://www.tomshardware.com/raspberry-pi/arduino-uno-q-review)), 4–5 W ([element14](https://community.element14.com/products/roadtest/rv/roadtest_reviews/1906/arduinos_uno_q_-_the_new_single-board_computer)) |
+| Remote UNO Q, almost idle (reads two sensors, sends UDP) | 0.5 | 3.3 | Idle in the same reviews: 0.5 W (Geerling) to 3.3 W (Tom's Hardware) |
+| Elecrow 7" display | 2.55 | 2.55 | Elecrow wiki ([WIRING.md](../WIRING.md#power)) |
+| USB headset | 0.25 | 0.5 | Our assumption |
+| Four Modulinos | 0.1 | 0.2 | Our assumption |
+| USB-C hub | 0.5 | 1.0 | Our assumption |
+| **Sum (DC)** | **6.9** | **12.6** | |
+| At the wall, power supply 90 % / 85 % efficient | 7.7 | 14.8 | |
+
+| | Lower | Upper |
+| --- | --- | --- |
+| Operational, E × I | 0.058 g | 0.112 g |
+| Embodied, M | 0.008 g | 0.008 g |
+| **SCI per round** | **0.066 g CO₂e** | **0.119 g CO₂e** |
+
+What the estimate shows:
+
+- **Operating power dominates under the SCI rule.** The rule spreads embodied emissions over the device's whole lifetime, so M is small. If the trainer only runs 2 hours a day on 200 days a year, the 13 kg spread over the rounds actually played (76 800 in 4 years) is 0.17 g per round, and the SCI rises to 0.23–0.28 g. Then the hardware matters more than the electricity.
+- **The second board is the biggest lever.** A remote on a cable instead of its own UNO Q would cut the upper estimate from 0.119 to 0.086 g per round. Counted per round actually played, it would fall from 0.28 to 0.17 g.
+- **The display draws about as much as the game board.** Today idle mode only paints it black. Switching the panel off (`system.display_dpms`) is disabled because the inrush on wake drops the USB hub; a separate supply for the display would allow it.
+
+Limits: the board figures are whole-board reviews in other set-ups; the headset, Modulino and hub values are our assumptions. The display, headset and hub are counted in E but their embodied emissions are not in M (no data). The measurement with a USB-C power meter replaces the power table.
 
 What already lowers E and M by design:
 
@@ -109,12 +138,12 @@ What already lowers E and M by design:
 - **Smallest model that passes.** Needle is cut to 12 of its 20 layers: the smallest rung that reached our bar, without training runs.
 - **No speech synthesis at run time.** All spoken lines are rendered once at setup.
 - **Light rendering:** 30 fps cap, the map pre-rendered; the MCU pushes sensor frames instead of Linux polling.
-- **Idle mode:** after 60 s without input the display goes to standby and the microphone off.
+- **Idle mode:** after 60 s without input the screen goes black and the microphone off.
 
 ## Limitations
 
 - Tested with synthetic voices only; real speakers and hall noise are still to be tested.
-- Energy and therefore the SCI value are not measured yet.
+- Energy is not measured yet; the SCI value is an estimate from published figures.
 - The licence of the Needle weights still has to be checked ([PLAN.md](../PLAN.md#licenses)).
 - English only.
 - Two boards: the remote is a whole UNO Q for two distance sensors.

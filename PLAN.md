@@ -667,7 +667,7 @@ Published in the [speech-to-speech README](https://github.com/th-nuernberg/speec
 | J1 | Innovation (20 %) | Needle reads drug and dose from free speech on the board; distance-sensor steering with a freeze key | Pitch slides 5–7 | 🟡 |
 | J2 | Technical quality (20 %) | Modular classes behind interfaces; 174 app tests and firmware unit tests; measured numbers | `pytest` green (14 Nov, laptop); [measurements.md](docs/measurements.md) | 🟡 |
 | J3 | Real-world impact (20 %) | Skills-lab training for medical students; offline for hospital data rules | Pitch slide 2; tests with real students ([roadmap](ROADMAP.md)) | 🟡 |
-| J4 | Environmental impact, SCI (20 %) | Design choices in [Energy and environment](#energy-and-environment); SCI method in the [technical documentation](docs/technical-documentation.md#environmental-impact-sci) | SCI per round from measured power (C3) | ⬜ |
+| J4 | Environmental impact, SCI (20 %) | Design choices in [Energy and environment](#energy-and-environment); SCI method in the [technical documentation](docs/technical-documentation.md#environmental-impact-sci) | Estimate: 0.07–0.12 g CO₂e per round from published power figures (14 Nov); SCI from measured power (C3) still open | 🟡 |
 | J5 | Presentation and demo (20 %) | [pitch/](pitch/README.md), video of a live round | Pitch held at the event | ⬜ |
 
 ## Questions for the organisers

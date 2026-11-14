@@ -13,12 +13,12 @@ Where Steady Hands goes after the hackathon (14 November 2026). The prototype ru
 
 ## 2. Measure and cut the energy (SCI)
 
-The judging asks for the [Software Carbon Intensity](https://sci.greensoftware.foundation/). The method is in [docs/technical-documentation.md](docs/technical-documentation.md#environmental-impact-sci); the power numbers are not measured yet.
+The judging asks for the [Software Carbon Intensity](https://sci.greensoftware.foundation/). Our estimate from published figures is 0.07–0.12 g CO₂e per round ([calculation](docs/technical-documentation.md#environmental-impact-sci)); the power numbers behind it are not our own measurements yet.
 
 | Step | Done when |
 | --- | --- |
 | **Power per state** (idle, menu, round without speech, round with speech) with a USB-C power meter on the hub input. | Table in [docs/measurements.md](docs/measurements.md#power-and-energy) filled |
-| **SCI per training round** from those numbers, the German grid intensity and the embodied emissions of the two boards. | One number in gCO₂e per round, with its inputs |
+| **SCI per training round from measured power**, replacing the estimate's power table. | One measured number in g CO₂e per round, with its inputs |
 | **Saving from the VAD gate** (speech-to-text gated vs. always on). | Saving in % measured |
 | **One board instead of two.** The remote is a full UNO Q that only measures two distances and sends them over Wi-Fi. Where the remote may have a cable, a long Qwiic cable to the game board would save one board, its power supply and its embodied emissions. | Same steering quality with one board; SCI of both set-ups compared |
 

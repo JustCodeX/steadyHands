@@ -94,7 +94,7 @@ The test sentences were spoken by synthetic voices; tests with real medical stud
 
 ### Energy
 
-No general LLM, models that run only when the voice activity detector hears speech, the smallest Needle rung that passed our tests, pre-rendered voices, a 30 fps cap and an idle mode. The power measurement for the Software Carbon Intensity per round is the next step: [technical documentation](https://github.com/JustCodeX/steadyHands/blob/main/docs/technical-documentation.md#environmental-impact-sci).
+Software Carbon Intensity: **about 0.07–0.12 g CO₂e per one-minute training round**, estimated from published power figures for the UNO Q, the German grid mix (363 g CO₂/kWh) and the embodied emissions of the two boards. The design keeps it low: no general LLM, models that run only when the voice activity detector hears speech, the smallest Needle rung that passed our tests, pre-rendered voices, a 30 fps cap and an idle mode. Our own power measurement comes next. Calculation: [technical documentation](https://github.com/JustCodeX/steadyHands/blob/main/docs/technical-documentation.md#environmental-impact-sci).
 
 ### What's next
 
