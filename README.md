@@ -14,7 +14,7 @@ The deliverables named in the [Speech-to-Speech hackathon brief](https://github.
 | Source code repository | This repo: [firmware/](firmware/README.md), [app/](app/README.md), [levels/](levels/README.md), under the [MIT licence](LICENSE) |
 | Short technical documentation | [docs/technical-documentation.md](docs/technical-documentation.md) |
 | Project on the Arduino Project Hub | Page text, ready to paste: [docs/project-hub.md](docs/project-hub.md) |
-| 5-minute demo presentation | [pitch/](pitch/README.md): slides (`index.html`, [PDF](pitch/steady-hands-pitch.pdf)) and the 45 s demo video |
+| 5-minute demo presentation | [pitch/](pitch/README.md): slides (`index.html`, [PDF](pitch/steady-hands-pitch.pdf)) and the 45 s demo video; PowerPoint with the video embedded under [Releases](https://github.com/JustCodeX/steadyHands/releases/latest) |
 | Future roadmap | [ROADMAP.md](ROADMAP.md) |
 
 How the project answers the judging criteria (20 % each):
