@@ -1,99 +1,93 @@
-# Whistle and Needle (Cactus) for the nurse's treatments
+# Whistle and Needle (Cactus) for the nurse's orders
 
-Two optional models from Cactus Compute serve one mechanic: the **vitals monitor**. When a value drifts, the surgeon tells the nurse what to give, in a free sentence ("he can't breathe, do something"). **Whistle** (speech-to-text) hears the sentence, **Needle** (tool calling) turns it into one of three treatments: `oxygen`, `anaesthesia`, `adrenaline`.
+Two optional models from Cactus Compute serve one mechanic: the **vitals monitor**. When a value goes wrong, the surgeon orders a drug and an amount from the nurse ("Propofol 40.", "Oxygen to 60 percent.", "Push 10 micrograms of adrenaline."). **Whistle** (speech-to-text) hears the order, **Needle** (tool calling) reads the drug and the amount: one of three tools, each with one integer parameter.
+
+This is the part a keyword list cannot do: the number, its unit and its binding to the right drug, two orders in one sentence ("Give him 40 of propofol and turn the oxygen to 70."), corrections ("Propofol 20, no wait, 30."). The game rules are in [PLAN.md](../PLAN.md#vitals-monitor-and-the-nurse).
 
 **Every older voice command stays on the Vosk grammar.** Instruments, `steady`, `light`, `cancel`, `repeat`, `help`, `pause`, `continue` and `new game` never go through Whistle or Needle, and the two paths never fire each other's words.
 
-Status (14 Nov 2026): the adapters were checked against the source of `cactus-compute` 4.2.0 and run on a laptop and on the board. The pipeline works end to end. The published Needle rungs are **not good enough on their own** for free sentences (numbers below); a trigger-word gate and an alarm-only rule keep the game safe. Fine-tuning is the documented way to improve the rungs, and it is postponed until the team decides (it needs no change in the code: a tuned rung is another `.cact` file).
+Status (14 Nov 2026): checked against the source of `cactus-compute` 4.2.0 and run on a laptop and on the board. Rung **12L** reads 40 of 42 test orders right and gives no order for 14 sentences of talk (laptop). No fine-tuning (postponed until real-speaker tests show it is needed).
 
 ## How a segment is decided
 
 `trainer/voice/understanding.py` (`CommandUnderstanding`). Both recognisers hear the same speech segment.
 
 1. **Short call with a command phrase** ("Clamp!", under 1.2 s): the Vosk grammar decides at once. Whistle never runs.
-2. **Longer segment, or one the grammar did not catch:** Whistle transcribes it when it ends.
-   - A treatment named outright ("give him adrenaline") counts at any time.
-   - **While an alarm is open** (`InstructionWindow` from the engine), Needle decides sentences that name no treatment, but only if one of the treatments' trigger words is in the sentence (`voice.needle_require_trigger`).
-   - Otherwise the grammar's result stands, as before. During an alarm, a sentence without a treatment gets "Pardon, doctor?"; the second time, the nurse names what she can give.
-3. **Without Whistle** (the default config, or a missing model), the treatment phrases join the Vosk grammar, so the game is playable by voice without any model (criterion T3), and with keys 5, 6, 7.
+2. **Longer segment, or one the grammar did not catch:** Whistle transcribes it when it ends, biased towards the drug and unit words (`ORDER_WORDS`).
+   - **No drug named:** never an order; the model does not run. The grammar's result stands as before. During an alarm (`InstructionWindow` from the engine) the nurse says "Pardon, doctor?", the second time how to order.
+   - **A drug named:** Needle reads the orders (`NeedleOrders`). Each order is a `CommandEvent` with `amount`.
+   - **A drug named without a usable amount** ("More propofol!"): the standard dose (`vitals.standard_doses`). It fits about half of the episodes.
+3. **Without Whistle** (the default config, or a missing model), the drug names join the Vosk grammar: orders at the standard dose, so the game is playable by voice without any model (criterion T3), and with keys 5, 6, 7.
 
 ## Switching it on
 
 1. On the board, in the app's venv: `pip install -r requirements-cactus.txt` (pinned to 4.2.0).
 2. Once, while online: `python -m cactus fetch`. The runtime downloads its engine library on first use, and the app runs it with `HF_HUB_OFFLINE=1`. `WITH_CACTUS=1 setup/download_models.sh` does this and downloads `whistle.cact`.
-3. Copy `needle3-9L.cact` into `app/models/` (built on a laptop, see [Building rungs](#building-rungs)).
+3. Copy `needle3-12L.cact` into `app/models/` (built on a laptop, see [Building rungs](#building-rungs)).
 4. `python -m trainer --config cactus.toml`, or set `STEADYHANDS_CONFIG=cactus.toml` for the autostart.
 
 If the package or a file is missing, the app logs one line and runs as in step 3 of the list above.
 
 ## What was checked against the runtime
 
-Read in the package source (`cactus/agent/text.py`, `whistle.py`, `_worker.py`, `tools.py`) and confirmed by `tests/test_cactus_real.py` (runs only with the package and the models):
+Read in the package source (`cactus/agent/text.py`, `whistle.py`, `_worker.py`, `tools.py`, `grounding.py`) and confirmed by `tests/test_cactus_real.py` (runs only with the package and the models):
 
 | Assumption in the first version | Finding | Change |
 | --- | --- | --- |
-| `Cactus.run()` executes the tool and returns its confidence | `run()` executes the tools, then runs the model **a second time** on their results and returns that turn's envelope | `NeedleAgent` uses `complete()`, which returns `function_calls`, `suppressed_calls` and `confidence` of the first turn without executing anything. Half the latency |
-| Tools as Python functions with a runtime `Literal` | Works, but the runtime also takes JSON schemas directly | Tools are JSON schemas from `ActionCatalog` |
+| `Cactus.run()` executes the tool and returns its confidence | `run()` executes the tools, then runs the model **a second time** on their results and returns that turn's envelope | `NeedleAgent` uses `complete()`, which returns `function_calls`, `suppressed_calls`, `confidence` and `validation` of the first turn without executing anything. Half the latency |
+| Tools as Python functions with a runtime `Literal` | The runtime also takes JSON schemas directly | Tools are JSON schemas from `ActionCatalog`, with an integer parameter (min, max) |
+| — | The runtime checks numbers against the text and lists invented ones in `validation.ungrounded` | `NeedleAgent.calls()` drops such calls: "Propofol." or "his sats look good now" give no order |
+| — | Two calls to the same tool for a correction ("20, no wait, 30") | The last call per tool counts |
 | Several agents in one process | Weights other than the published base run in a **worker process** of the runtime's own (one per agent) | `unload()` closes the worker; one Needle agent in the game |
 | `confidence` is a number | `None` for weights without a confidence head (e.g. LoRA builds). Rungs from `cactus build --layers` keep the head | `None` counts as 1.0, with one log line |
-| `transcribe(list_of_floats, ...)` | Takes a float32 array directly; returns `text`, `language`, and `words` with `probability` | `WhistleRecognizer` passes the array |
+| `transcribe(list_of_floats, ...)` | Takes a float32 array; returns `text`, `language`, and `words` with `probability`. Writes numbers as digits ("30 mg", "60%") | `WhistleRecognizer` passes the array |
 | Telemetry and hub off | `CACTUS_TELEMETRY=0` is read per call; `HF_HUB_OFFLINE` must be set before `huggingface_hub` is imported | Unchanged: `load_cactus()` sets both before the import |
-| — | Tool schemas take `triggers`: request regexes (documented, not explained) | Every treatment has triggers; they decide whether Needle picks the right tool (below) |
+| — | Tool schemas take `triggers` (request regexes) | Each tool triggers on its drug's names; without a drug name the model is not run |
+| — | Whistle often leaves off the final full stop, and Needle then missed the amount ("Push 10 micrograms of adrenaline") | `NeedleOrders` adds the full stop |
 
 ## Tools
 
-`ActionCatalog(MODEL_ACTIONS)`: three tools without parameters, each with a one-line description and a trigger regex (`trainer/game/actions.py`). The runtime's docs advise five tools or fewer and plain names.
+`ActionCatalog(MODEL_ACTIONS)` in `trainer/game/actions.py`:
 
-Whistle gets the treatment phrases and a list of symptom words as `keywords` (`SYMPTOM_WORDS`). Without them it wrote "saps" for "sats" and "waiting up" for "waking up" on synthetic speech.
+| Tool | Order word | Parameter | Range | Triggers |
+| --- | --- | --- | --- | --- |
+| `set_oxygen` | `oxygen` | `percent` | 21–100 | oxygen, O2, FiO2 |
+| `give_propofol` | `propofol` | `milligrams` | 5–200 | propofol |
+| `give_adrenaline` | `adrenaline` | `micrograms` | 5–100 | adrenaline, epinephrine |
 
 ## Measurements
 
-Test data: `app/tests/data/needle_cases.json`, written 14 Nov 2026 by one author (they share a style; real speakers on the board are the test that counts). 45 treatment sentences without a treatment phrase (15 of them without any trigger word), 25 sentences of talk, 12 status reports with the same medical words as an alarm ("his sats look good now"), 14 older commands in free words. Tool: `app/tools/needle_eval.py`. Pass rule: at least 90 % of the treatment sentences right, and at most one false trigger.
+### Orders (drug and amount), the current task
 
-### Tool layout (laptop, 20 sentences, before the full data set)
+Test data: `app/tests/data/needle_cases.json`, written 14 Nov 2026 by one author (one style; real speakers decide). 36 orders with amounts (digits and some in words, units or not, two orders in one sentence, corrections), 6 drugs named without an amount, 14 sentences of talk without a drug, 4 sentences of talk that name a drug. Tool: `app/tools/needle_eval.py`. Pass rule: at least 90 % of orders and named drugs exactly right (every drug and every amount), at most one false order on talk.
 
-| Layout | Result |
-| --- | --- |
-| 3 treatment tools without triggers | Every rung picked the same tool for almost every sentence (20L: 7/20, 9L: 7/20) |
-| One `treat_patient(treatment)` tool with an enum | 1–3/20 on every rung |
-| Instrument tool added to the treatments | Clamp 0/8 and scalpel 0/8 on every rung; 17–24 of 25 talk sentences triggered something |
-| 3 treatment tools **with triggers** | 15/15 treatment sentences on 20L, 16L, 12L and 9L |
+Laptop (Intel i9-9880H, macOS):
 
-### Published rungs on the full data set
+| Rung | Right (of 42) | False orders (of 14) | Model call median / worst | Peak memory |
+| --- | --- | --- | --- | --- |
+| 4L | 26 (62 %) | 0 | 65 / 690 ms | 59 MB |
+| 6L | 29 (69 %) | 0 | 76 / 271 ms | 65 MB |
+| 8L | 36 (86 %) | 0 | 80 / 843 ms | 86 MB |
+| 9L | 35 (83 %) | 0 | 95 / 178 ms | 89 MB |
+| **12L** | **40 (95 %) PASS** | **0** | 131 / 200 ms | 113 MB |
+| 16L | 38 (90 %) PASS | 0 | 179 / 667 ms | 141 MB |
+| 20L (published) | 40 (95 %) PASS | 0 | 197 / 388 ms | 114 MB |
 
-Laptop (Intel i9-9880H, macOS), and the board (UNO Q, governor `schedutil`, the game running at the same time). Treatment = right out of 45; false = false triggers out of 51 (talk / status / older commands).
+- 12L is the smallest rung that passes and the default. Its two misses: "FiO2 70." (no call on any rung) and one of the two-order sentences.
+- Talk that names a drug ("Is the propofol ready?", "We gave 30 of propofol earlier.") becomes an order at the standard dose or with the amount, on every rung. That is the price of "a named drug without an amount gets the standard dose"; it is rare in a round.
+- Board numbers: [measurements.md](measurements.md).
 
-| Rung | File | Laptop, gate on | Laptop, no gate (39 talk + older) | Board, gate on | Board: model call median / worst | Board: peak memory |
-| --- | --- | --- | --- | --- | --- | --- |
-| 4L | 15 MB | 28, false 11 (0/11/0) | 31, false 23/39 | 28, false 10 (0/10/0) | 693 / 6490 ms | 61 MB |
-| 6L | 17 MB | 26, false 11 | 30, false 34/39 | 26, false 10 | 699 / 8969 ms | 67 MB |
-| 8L | 27 MB | 29, false 11 | 33, false 38/39 | | | |
-| **9L** | 28 MB | **29, false 11** | 33, false 38/39 | **29, false 11 (0/11/0)** | **1033 / 1313 ms** | **90 MB** |
-| 12L | 39 MB | 29, false 11 | 34, false 32/39 | 29, false 11 | 1242 / 1692 ms | 114 MB |
-| 16L | 51 MB | 29, false 11 | 37, false 32/39 | | | |
-| 20L (published) | 35 MB | 28, false 11 | 33, false 35/39 | | | |
+### Earlier task: guessing the treatment from symptoms (replaced)
 
-- **No rung passes.** Without the gate, every rung calls a tool for almost any talk. The confidence of those calls is as high as that of right calls (16L: right 0.38–0.86, false 0.44–0.90), so no threshold separates them.
-- With the gate, talk and older commands never trigger (0 of 39), but the model cannot tell "his sats are dropping" from "his sats look good now": 10–11 of 12 status reports trigger. Sentences without a trigger word never reach it (0 of 15).
-- Depth hardly matters with the gate (26–29 of 45). **9L is used:** the same quality as 12L–20L, a steady latency on the board (4L and 6L had outliers of 6–9 s), and the rung the team measured before.
-- What keeps the game safe: Needle only runs while an alarm is open, so a status report outside an alarm does nothing. During an alarm a false trigger is a wrong treatment, which the game treats like any wrong instruction.
+Before the dosing mechanic, Needle had to map free sentences like "he can't breathe" to one of three treatments without parameters. With the published rungs that did not work well enough: without a trigger gate every rung called a tool for almost any talk (23–38 of 39 sentences), with the gate 10–11 of 12 status reports ("his sats look good now") still triggered, and depth hardly mattered (26–29 of 45 right, 9L to 20L, laptop and board). Reading an amount is a task the model does well; telling "dropping" from "fine" is not.
 
-### The whole voice path with synthetic speech (`app/tools/voice_drive.py`)
+### Whistle and the drug names (synthetic voices, open point)
 
-32 cases (16 sentences, two macOS voices): calls, named treatments, free treatment sentences with an alarm open, talk with and without an alarm, status outside an alarm. Played into `VoiceService` block by block, with the app's own builders.
+With the macOS voices, Whistle needs its keyword bias for "propofol": without keywords 0 of 10 sentences, with keywords 5 of 5 for the voice Samantha, but 0 of 5 for Daniel (British), and Karen, Moira, Rishi and Tessa also heard "probable", "proper full" and similar. "Oxygen" and "adrenaline" came through for all of them. Synthetic voices say little about people; the test with real speakers on the board decides whether "propofol" needs a second name.
 
-| Setup | Right | End of speech → event, median / worst | Engines loaded |
-| --- | --- | --- | --- |
-| Laptop, `cactus.toml` (Whistle + Needle 9L) | 32/32 (30/32 before the symptom keywords) | 93 / 235 ms | 1.2 s |
-| Laptop, defaults (no model) | 18/32: free treatment sentences are not understood | 10 / 12 ms | 0.6 s |
-| **Board, `cactus.toml`** | **32/32** | **790 / 1860 ms** | 5.6 s |
-| Board, defaults | 18/32 | 87 / 104 ms | 3.1 s |
+### The whole voice path (`app/tools/voice_drive.py`, synthetic voices)
 
-"End of speech" is when the segmenter closed the segment (after 400 ms of silence for a call, 700 ms for a sentence). These are synthetic voices in clean audio; the test with people in the hall is in [tests.md](tests.md).
-
-### Memory on the board
-
-Full app with `cactus.toml`, menu (14 Nov 2026, 00:01 UTC): MemAvailable 1959–1966 MB; trainer process 364–373 MB RSS (327 MB without the Cactus models, same boot); Needle worker process 89 MB RSS. Disk after installing package, engine and five model files: 1.9 GB free.
+32 cases (16 sentences, voices Samantha and Daniel): calls, orders with amounts, two orders, a correction, drugs without an amount, talk with and without an alarm. Played into `VoiceService` with the app's own builders. Latest numbers: [measurements.md](measurements.md).
 
 ## Building rungs
 
@@ -106,30 +100,28 @@ uv pip install --python .venv-train/bin/python --only-binary sentencepiece,jaxli
   "cactus-compute[train]==4.2.0" "jax==0.4.38" "jaxlib==0.4.38" "flax>=0.10.2,<0.10.5" \
   "optax<0.2.5" "numpy<2.2" "sentencepiece<0.2.1"
 CACTUS_TELEMETRY=0 .venv-train/bin/cactus download needle3.safetensors --out checkpoints   # 242 MB
-CACTUS_TELEMETRY=0 .venv-train/bin/cactus build checkpoints/checkpoints/needle3.safetensors --layers 9 --out needle3-9L.cact
+CACTUS_TELEMETRY=0 .venv-train/bin/cactus build checkpoints/checkpoints/needle3.safetensors --layers 12 --out needle3-12L.cact
 ```
 
-About 35 s per rung on the laptop. Output W4A8, so 16L (51 MB) is larger than the published 20L (35 MB, CQ2).
+About 35 s per rung on the laptop. Output W4A8, so 16L (51 MB) is larger than the published 20L (35 MB, CQ2). 12L: 39 MB.
 
-## Next step if the rungs are to get better: fine-tuning (not done)
+## If the rungs are to get better: fine-tuning (not done)
 
-`cactus finetune data.jsonl` trains a LoRA adapter, `cactus build --lora adapter.safetensors --layers N` merges and cuts it. The Cactus blog reports 18 to 36 points more per depth. What it would need here:
-- training sentences in the runtime's JSONL format, apart from `needle_cases.json` so that a tuned rung is not measured on its own training data; status reports belong in them as "no call";
-- a tuned rung has no confidence head (it reports `None`);
-- the measurement with `needle_eval.py`, gate on and off, on the board.
+`cactus finetune data.jsonl` trains a LoRA adapter, `cactus build --lora adapter.safetensors --layers N` merges and cuts it. The Cactus blog reports 18 to 36 points more per depth. What it would need here: training orders in the runtime's JSONL format, apart from `needle_cases.json`; talk that names a drug as "no call"; a tuned rung has no confidence head (it reports `None`); then `needle_eval.py` on the board.
 
 ## Design rules
 
-- **Names first, model second.** A treatment named outright never waits for the model.
-- **"No tool" is a valid answer**, and a model that fails means no treatment (a wrong treatment harms the patient).
-- **Needle only while an alarm is open**, and only with a trigger word in the sentence.
+- **The drug must be named.** Speech without a drug name is never an order and costs no model run (C3).
+- **Amounts only from the text.** An amount the model invents is dropped (the runtime's grounding check); then the standard dose applies.
+- **A model that fails means the standard dose** for every drug named, never a guess at another drug.
 - **Every text stands alone:** `reset()` before every call.
 - **No network:** `load_cactus()` sets `CACTUS_TELEMETRY=0` and `HF_HUB_OFFLINE=1` before the import (C2, C4).
-- **No transcripts outside `VoiceService`:** the log holds the treatment word and timing only.
+- **No transcripts outside `VoiceService`:** the log holds the order word, the amount and timing only.
 - **The defaults need no model** (T3).
 
 ## Open points
 
-- The test with people: 20 spoken instructions on the board, free and by name, and 20 plain commands as a cross-check ([tests.md](tests.md)).
+- The test with people: 20 spoken orders on the board, with and without amounts, and 20 plain commands as a cross-check ([tests.md](tests.md)).
+- Whether "propofol" needs a second spoken name (see above).
 - Licences: Whistle is Apache-2.0 (model card), the `cactus-compute` package is Apache-2.0 (its metadata). Needle's model licence still needs checking.
-- The CPU governor: the numbers above are with `schedutil`; the hand-over measured with `performance`.
+- The CPU governor: board numbers are with `schedutil`; the team hand-over measured with `performance`.

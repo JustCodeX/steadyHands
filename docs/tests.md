@@ -52,27 +52,30 @@ With `voice.answer_vocabulary = "both"` (the default). Run with `--config debug-
 
 ## Vitals monitor and the nurse
 
-With `--config cactus.toml` (Whistle + Needle 9L) unless noted. Synthetic-voice
-run for comparison: [needle-integration.md](needle-integration.md#measurements).
+With `--config cactus.toml` (Whistle + Needle 12L) unless noted. Rules: [PLAN.md](../PLAN.md#vitals-monitor-and-the-nurse).
 
 | Case | Expected reaction | Observed |
 | --- | --- | --- |
-| a value drifts, nothing said | alarm line and blinking tile; after 6 s the nurse repeats it with the value; critical for 4 s: "critical", one life lost | |
-| right treatment by name ("Oxygen!") | read-back ("More oxygen."), value recovers in about 3 s, "stable again" | |
-| right treatment in other words ("he can't breathe") | as above, after about a second | |
-| wrong treatment | read-back, "That did not help", its side effect on the monitor, the value jumps worse | |
-| treatment with no alarm open | read-back, "That was not needed", counted as wrong | |
-| sentence without a treatment during an alarm | "Pardon, doctor?"; the second time she names oxygen, anaesthesia, adrenaline | |
+| a value drifts, nothing said | alarm line and yellow tile; after 6 s the nurse repeats it with the value; critical for 4 s: "critical", one life lost | |
+| the right dose read from the dose card ("Propofol 50" at BIS 75) | read-back "Propofol 50 milligrams.", the value returns to normal in about 3 s, "stable again" | |
+| too little ("Propofol 20" at BIS 75) | read-back; the value settles short, "BIS still at 63."; a second order finishes it; counted right | |
+| too much ("Propofol 120" at BIS 63) | read-back, "That was too much", then "He is too deep now", recovers after a few seconds; counted as overdose | |
+| oxygen as a setting ("Oxygen to 70 percent") | FiO2 tile shows 70 %; saturation recovers if that covers the need; afterwards the nurse weans it back to 30 % | |
+| drug without an amount ("More propofol!") or keys 5, 6, 7 | "Standard dose. Propofol 30 milligrams."; fits some episodes, falls short or overshoots in others | |
+| two orders in one sentence ("Propofol 40 and oxygen to 70") | both read back, both applied | |
+| a correction ("Propofol 20, no wait, 30") | only 30 mg given | |
+| the wrong drug | read-back, "That did not help", its side effects, the value in trouble gets worse | |
+| an order with no alarm open | read-back, "That was not needed", counted as wrong | |
+| a sentence without a drug during an alarm | "Pardon, doctor?"; the second time "Order a drug and how much, like propofol 40." | |
 | talk with no alarm open ("his sats look good now") | nothing | |
-| plain commands during an alarm ("Clamp!") | the instrument changes; no treatment | |
-| keys 5, 6, 7 | the three treatments | |
-| without `cactus.toml` | treatments by name through the grammar; free sentences do nothing | |
+| plain commands during an alarm ("Clamp!") | the instrument changes; no order | |
+| without `cactus.toml` | drug names through the grammar at the standard dose; amounts are not heard | |
 
-| Spoken instructions on the board (20, people) | Tries | Right | Wrong treatment | Nothing / "Pardon?" | Median latency (ms) |
-| --- | --- | --- | --- | --- | --- |
-| by name | | | | | |
-| in other words | | | | | |
-| 20 plain commands as a cross-check | | | | | |
+| Spoken orders on the board (people) | Tries | Right drug and amount | Wrong amount | Wrong drug | Nothing / "Pardon, doctor?" | Median latency (ms) |
+| --- | --- | --- | --- | --- | --- | --- |
+| with an amount | | | | | | |
+| drug only (standard dose) | | | | | | |
+| 20 plain commands as a cross-check | | | | | | |
 
 ## Co-op hand-over
 
@@ -85,16 +88,15 @@ run for comparison: [needle-integration.md](needle-integration.md#measurements).
 
 ## Needle on the board (`app/tools/needle_eval.py`)
 
-Treatments only (45 sentences), false triggers out of 51; trigger gate on.
-14 November 2026, JustuBoard, `schedutil`, game running.
+Orders (42 cases) and talk (14), trigger gate on. 14 November 2026, JustuBoard, `schedutil`, game running.
 
-| Rung | Treatments right | False triggers (talk / status / older commands) | Model call median (ms) | Worst (ms) | Peak memory (MB) |
+| Rung | Right (of 42) | False orders (of 14) | Model call median (ms) | Worst (ms) | Peak memory (MB) |
 | --- | --- | --- | --- | --- | --- |
-| 4L | 28 | 0 / 10 / 0 | 693 | 6490 | 61 |
-| 6L | 26 | 0 / 10 / 0 | 699 | 8969 | 67 |
-| 9L | 29 | 0 / 11 / 0 | 1033 | 1313 | 90 |
-| 12L | 29 | 0 / 11 / 0 | 1242 | 1692 | 114 |
+| 9L | 36 | 0 | 1228 | 2031 | 91 |
+| 12L | 40 | 0 | 1851 | 3615 | 115 |
+
+The first version (treatments guessed from symptoms, 45 sentences) is in [needle-integration.md](needle-integration.md#earlier-task-guessing-the-treatment-from-symptoms-replaced).
 
 | Case | Expected reaction | Observed |
 | --- | --- | --- |
-| `cactus-compute` not installed, or a model file missing | one log line; treatments by name through the Vosk grammar | |
+| `cactus-compute` not installed, or a model file missing | one log line; drug names through the Vosk grammar at the standard dose | |

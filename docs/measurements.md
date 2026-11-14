@@ -77,7 +77,27 @@ day (microphone → STT → matcher → pre-rendered clip, model loaded once at
 start). P6 requires 3–5 s, so even the worst case has ~4× headroom. Treat this
 as the bound to beat; measure this stack's own numbers with 20 spoken commands.
 
-### Vitals monitor: the voice path with Whistle and Needle *(synthetic voices)*
+### Vitals monitor with doses: Needle reads drug and amount
+
+Measured 14 November 2026 with `app/tools/needle_eval.py` on
+`tests/data/needle_cases.json` (42 orders and named drugs, 14 sentences of
+talk). Board: JustuBoard, governor `schedutil`, the game running at the same
+time with its own Needle worker.
+
+| Rung | Where | Right (of 42) | False orders (of 14) | Model call median (ms) | Worst (ms) | Peak memory (MB) |
+| --- | --- | --- | --- | --- | --- | --- |
+| 12L (default) | Board | 40 | 0 | 1851 | 3615 | 115 |
+| 9L | Board | 36 | 0 | 1228 | 2031 | 91 |
+| 12L | Laptop (Intel i9) | 40 | 0 | 131 | 200 | 113 |
+
+All rungs on the laptop: [needle-integration.md](needle-integration.md#measurements).
+
+Whole voice path with synthetic voices (`tools/voice_drive.py`, 32 cases,
+laptop): 24/32 right, 148 ms median from end of speech. The misses are
+Whistle hearing "propofol" as other words (voice Daniel) and one amount
+Needle did not read; see [needle-integration.md](needle-integration.md#whistle-and-the-drug-names-synthetic-voices-open-point).
+
+### Vitals monitor, first version (treatments without amounts) *(synthetic voices)*
 
 Measured 14 November 2026 with `app/tools/voice_drive.py`: 32 cases (16
 sentences, macOS voices Samantha and Daniel) played into the app's

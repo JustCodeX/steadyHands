@@ -64,8 +64,8 @@ The surgeon holds the **instrument**, a handle containing the Modulino Movement,
 | Modulino Knob | Menu: picks the level · Round: turn picks the instrument (co-op: the assistant's choice), press switches on the light in dark zones · Paused: steering sensitivity |
 | Modulino Buttons A / B / C | A: start, use the instrument · B: pause/continue · C: next instrument in a round (co-op: hand over the chosen instrument); in the menu, switch between one-player and co-op |
 | Modulino Distance (optional, stretch) | Hand height sets depth: lower your hand to grab, raise it to travel |
-| Voice | Tool and room commands, and the nurse's treatments (see below) |
-| Keyboard (development) | Arrows tilt, 1–4 instruments, 5–7 treatments, letters for the other commands |
+| Voice | Tool and room commands, and the nurse's orders with an amount (see below) |
+| Keyboard (development) | Arrows tilt, 1–4 instruments, 5–7 the three drugs at the standard dose, letters for the other commands |
 
 ### Voice commands
 
@@ -83,9 +83,9 @@ We picked words that sound different from each other. Every recognised command i
 | `repeat` | The patient repeats their last line |
 | `help` | The patient lists the commands that work right now |
 | `pause` · `continue` · `new game` | Game flow |
-| `oxygen` · `anaesthesia` · `adrenaline` | The nurse's treatments on the vitals monitor. With `cactus.toml` also in free sentences ("he can't breathe", "his pressure is dropping") |
+| `oxygen` · `propofol` · `adrenaline` (+ amount) | The nurse's orders on the vitals monitor. With `cactus.toml` the amount is read too ("Propofol 40", "oxygen to 60 percent"); without it, or without an amount, the standard dose |
 
-The commands above the last row stay on the Vosk grammar. The treatments go through Whistle and Needle when they are switched on; the two paths never fire each other's words ([speech pipeline](#speech-pipeline)).
+The commands above the last row stay on the Vosk grammar. The orders go through Whistle and Needle when they are switched on; the two paths never fire each other's words ([speech pipeline](#speech-pipeline)).
 
 ### Levels
 
@@ -97,19 +97,22 @@ Collision detection is a pixel lookup in the mask, so anyone on the team can dra
 
 ### Vitals monitor and the nurse
 
-A console along the bottom edge shows three values: oxygen saturation (SpO2), depth of anaesthesia (BIS) and systolic blood pressure. At random times one of them starts to drift.
+A console along the bottom edge shows three values: oxygen saturation (SpO2), depth of anaesthesia (BIS) and systolic blood pressure, plus the oxygen setting (FiO2). At random times one of them goes wrong, and the surgeon orders a **drug and an amount** from the nurse, by voice, without letting go of the instrument: "Propofol 40.", "Oxygen to 60 percent.", "Push 10 micrograms of adrenaline." The amount is what speech recognition plus a tool call add over keyword spotting: the number, its unit and the right drug, two orders in one sentence, and corrections ("Propofol 20, no wait, 30").
 
-| Value | Normal | Alarm | Critical | Right instruction |
-| --- | --- | --- | --- | --- |
-| SpO2 (%) | 98 | below 92 | below 86 | `oxygen` |
-| BIS | 45 | above 62 | above 75 | `anaesthesia` (deeper) |
-| Blood pressure, systolic (mmHg) | 120 | below 90 | below 75 | `adrenaline` |
+| Value | Normal | Alarm | Critical | Order | Dose card on the tile | Standard dose |
+| --- | --- | --- | --- | --- | --- | --- |
+| SpO2 (%) | 98 | below 92 | below 86 | `oxygen`, FiO2 in % (a setting) | O2 +10%: +3 | 55 % |
+| BIS | 45 | above 62 (too light), below 30 (too deep) | above 75, below 20 | `propofol`, mg | 10 mg: −6 | 30 mg |
+| Blood pressure, systolic (mmHg) | 120 | below 90, above 160 (too high) | below 75, above 180 | `adrenaline`, µg | 10 µg: +20 | 10 µg |
 
-- **Alarm:** the tile turns yellow and the nurse says it ("Doctor, sats are dropping."). After 6 s without the right instruction she repeats it with the value. A value that stays critical for 4 s costs a life, like a wall contact (counted apart as a crisis); the team steps in and the episode ends.
-- **The instruction** is spoken to the nurse, by name ("Oxygen!") or in a sentence ("he can't breathe, do something"), or given with keys 5, 6, 7. She reads it back ("More oxygen."), as in the operating room.
-- **Every treatment acts on all three values** (`app/trainer/game/vitals.py`): deeper anaesthesia lowers the blood pressure, adrenaline makes the patient lighter and the pulse jump. The right one stops the drift and the value recovers in about 3 s ("He is stable again."). A wrong one only brings its side effects, the drifting value jumps worse, and she says "That did not help, doctor." One with no alarm open is "not needed" and counts as wrong too.
+- **Dosing by the monitor** (`app/trainer/game/vitals.py`): the model is linear. Each episode needs an amount, and untreated the value settles at normal + dose card × the amount needed, so reading the deviation and dividing by the tile's dose card gives the dose. Example: BIS 75, 30 above normal, 6 per 10 mg → 50 mg.
+- **Too little** helps part of the way: the value settles short and the nurse says where ("BIS still at 63."); give more (titration counts as right). **Too much** overshoots into the opposite alarm ("He is too deep now, doctor.") for a few seconds; far too much and critical for 4 s is a crisis. Oxygen far above the need counts as too much. The **wrong drug** or one nobody needed brings only its own effects, and the value in trouble gets worse.
+- **Side effects:** propofol lowers the blood pressure (0.3 mmHg per mg), adrenaline lightens the anaesthesia and raises the pulse. The nurse weans the oxygen back once the saturation is stable.
+- **A drug named without an amount** ("Propofol!", or keys 5, 6, 7) gets the standard dose. It fits about half of the episodes, so reading the monitor pays off.
+- **Alarm:** the tile turns yellow and the nurse says it ("Doctor, sats are dropping."). After 6 s without an order she repeats it with the value. A value that stays critical for 4 s costs a life, like a wall contact (counted apart as a crisis); the team steps in and the episode ends.
+- **Read-back:** the nurse repeats every order with its amount ("Propofol 40 milligrams."), as in the operating room, and says when it did not help, was not needed, or was too much.
 - One episode at a time; none in the last 15 s of a round. Level 1 has none; from level 2 on, one to three (`vitals` in `level.json`).
-- Medically simplified on purpose: adrenaline stands in for whatever vasopressor an anaesthetist would choose, and the numbers are rounded.
+- Medically simplified on purpose: adrenaline stands in for whatever vasopressor an anaesthetist would choose, the doses and gains are rounded for a 60-second round, and the amount an episode needs is drawn at random.
 - The nurse's last line is shown as a subtitle next to the monitor: headset audio reaches only the wearer (D4).
 - The nurse has her own voice (Piper `en_GB-jenny_dioco-medium`, `audio.nurse_voice`), so the room hears two people. Her alarm lines last 1.5–1.7 s on the board.
 
@@ -139,7 +142,8 @@ After each round, the screen shows:
 | Steadiness | Jitter in the filtered tilt signal while moving through corridors |
 | Instrument calls | Correct calls, and calls for the wrong instrument for the task |
 | Precision help | How often `steady` was used |
-| Instructions to the nurse | Right ones out of all given (wrong and unneeded ones count against) |
+| Orders to the nurse | Right ones out of all counted: overdoses, wrong drugs and unneeded ones count against; titrating (too little, then more) does not |
+| Overdoses | How often an order was too much |
 | Crises | How often a vital sign stayed critical and the team had to step in |
 | Questions | How many of the patient's questions were answered correctly (only with the quiz on) |
 
@@ -448,7 +452,7 @@ The events on the bus are the interface tables above, written as classes: `Input
 2. **Signal processing:** a high-pass filter (removes rumble below about 100 Hz) and level normalisation, so that quiet and loud speakers are handled the same way.
 3. **Gate:** voice activity detection (Silero VAD or WebRTC VAD). Speech-to-text runs only on detected speech segments.
 4. **Speech-to-text for commands (❓ D2, Timon):** the default in the code is `VoskRecognizer` (Vosk small English with its vocabulary restricted to our command phrases). Restricting the vocabulary makes recognition more robust, and the model is small. Alternatives (Whistle, Whisper tiny) are further `SpeechRecognizer` subclasses, selected with `voice.recognizer` in the config. Whatever is chosen gets measured in M0 on 20 spoken commands with real hall noise.
-5. **Sentences for the nurse (optional, `cactus.toml`):** both recognisers hear every segment (`CommandUnderstanding`). A short call with a command phrase is decided by the Vosk grammar at once. A longer segment, or one the grammar did not catch, is transcribed by Whistle; if it names a treatment, or (only while an alarm is open, and only with a symptom word in it) Needle maps it to one, the treatment wins; otherwise the grammar's result stands. Without Whistle the treatment names join the grammar, so the minimum version needs no model. Details and measurements: [docs/needle-integration.md](docs/needle-integration.md).
+5. **Orders for the nurse (optional, `cactus.toml`):** both recognisers hear every segment (`CommandUnderstanding`). A short call with a command phrase is decided by the Vosk grammar at once. A longer segment, or one the grammar did not catch, is transcribed by Whistle (biased towards the drug and unit words). If it names a drug, Needle reads the drug and the amount (`NeedleOrders`); an amount the model invents is flagged by the runtime as ungrounded and dropped, and a drug named without an amount gets the standard dose. Otherwise the grammar's result stands. Without Whistle the drug names join the grammar (standard doses), so the minimum version needs no model. Details and measurements: [docs/needle-integration.md](docs/needle-integration.md).
 6. **Spoken answers (quiz, off by default):** while a quiz question is open, speech is an answer and not a command. Two more recognisers hear it together (`voice.answer_vocabulary = "both"`): one with the open vocabulary, which follows whole sentences but mishears rare words ("clamp" becomes "plan"), and one restricted to the open question's answer phrases, which knows the words but loses them inside a sentence. What both heard is joined. They use the same loaded Vosk model, so they add no second model to memory or disk, and they run only during the answer window. An `AnswerEvaluator` then maps the text to one of the question's options; the default looks for the options' phrases, and a tool-calling model can replace it ([docs/needle-integration.md](docs/needle-integration.md)). An answer that names no option, or two, is unclear and is asked for again, which is also what happens when the two recognisers contradict each other.
 7. **Response:** every recognised command appears on screen. Target: under 1 s from the end of a word to the tool change (to be measured).
 8. **Text-to-speech:** Piper with an English voice. We render all patient lines to WAV once at setup, so the game only plays files and there is no speech synthesis during play.
@@ -458,7 +462,7 @@ The events on the bus are the interface tables above, written as classes: `Input
    - During play, the trainer needs no network and exposes no network services. In demo mode, Wi-Fi is switched off where possible, which also saves energy.
    - Training scores are kept for the current session only.
 
-No LLM in the default configuration: the patient's and the nurse's lines are scripted. This saves the most energy and keeps response times short. Two small models from Cactus can be switched on with `app/cactus.toml` ([docs/needle-integration.md](docs/needle-integration.md)), for the nurse's treatments only: Whistle hears the sentence, and Needle, which can only choose one of three tool calls, maps it to a treatment. Their runtime's telemetry and hub access are switched off in the code. Measured 14 Nov 2026 on the board with synthetic voices: 32 of 32 cases right, 790 ms median from the end of speech; the published Needle rungs alone are not reliable enough, which the trigger-word gate and the alarm-only rule cover.
+No LLM in the default configuration: the patient's and the nurse's lines are scripted. This saves the most energy and keeps response times short. Two small models from Cactus can be switched on with `app/cactus.toml` ([docs/needle-integration.md](docs/needle-integration.md)), for the nurse's orders only: Whistle hears the order, and Needle, which can only call one of three tools with an integer amount, reads drug and amount. Their runtime's telemetry and hub access are switched off in the code. Needle rung 12L reads 40 of 42 test orders right with no false order on 14 talk sentences (laptop, 14 Nov 2026).
 
 ### Speech interaction
 
@@ -475,7 +479,7 @@ No LLM in the default configuration: the patient's and the nurse's lines are scr
 
 **Misheard speech:**
 - A match below the confidence threshold triggers nothing. The screen shows "?" and the patient asks "Pardon?".
-- While the nurse waits for an instruction (an alarm is open), a sentence without a treatment gets "Pardon, doctor?"; the second time she names what she can give. Outside an alarm such a sentence is ignored, so talk never disturbs the game.
+- While the nurse waits for an order (an alarm is open), a sentence that names no drug gets "Pardon, doctor?"; the second time she says how to order ("Order a drug and how much, like propofol 40."). Outside an alarm such a sentence is ignored, so talk never disturbs the game.
 - After two misses in a row, the patient lists the commands that fit the current situation, as with `help`.
 - Speech that doesn't resemble any command is ignored silently. This matters most in co-op, where the players talk to each other all the time and the game must not interrupt them.
 - `cancel` undoes a wrongly recognised tool change.
@@ -579,7 +583,7 @@ Event end: 14 November, 12:00. The exact build cutoff is not published; ask the 
 | Time | What happens | Shows criteria |
 | --- | --- | --- |
 | 0:00–0:15 | The problem: operating-room trainees need steady hands and clear instrument calls. We built an offline trainer on the UNO Q. | U1, U4 |
-| 0:15–1:15 | One live round (level 2 or 3): tilt the instrument; call "forceps"; touch a wall (buzz, "Ouch!"); an alarm comes ("Doctor, sats are dropping."): answer in a sentence without letting go ("he can't breathe, give him something"), the nurse reads back "More oxygen." and the tile turns green; say `cancel`; remove the item. The voice states and the nurse's subtitle are visible throughout. | U2, P1, P3–P6 |
+| 0:15–1:15 | One live round (level 2 or 3): tilt the instrument; call "forceps"; touch a wall (buzz, "Ouch!"); an alarm comes ("Doctor, he is waking up.", BIS 70): read the dose card and order without letting go ("Propofol 40."), the nurse reads back "Propofol 40 milligrams." and the tile turns green; say `cancel`; remove the item. The voice states and the nurse's subtitle are visible throughout. | U2, P1, P3–P6 |
 | 1:15–1:35 | Feedback screen plus the spoken result | U3, P1, P2 |
 | 1:35–1:50 | Measured values: energy per round, latency, RAM. Wi-Fi is off, and nothing leaves the board. | C1–C4, P6–P8 |
 | 1:50–2:00 | Co-op call-back in one sentence; the build is open source | C5 |
@@ -633,7 +637,7 @@ Sources: the event constraints and our proposed team requirements from the hacka
 | P2 | One end-to-end task, done reliably | One-player round from start to feedback | 10 runs in a row without a restart | ⬜ |
 | P3 | Help, repeat, cancel | [Voice commands](#voice-commands) `help`, `repeat`, `cancel` | Each tested 5 times | 🟡 |
 | P4 | Listening, processing, and speaking states visible | Microphone icon on screen, on-board RGB LED 4 ([Speech interaction](#speech-interaction)) | Every state seen in a demo round | 🟡 |
-| P5 | Graceful recovery from misheard speech | Confidence threshold, "Pardon?", hint with fitting commands, `cancel`, button fallback; "Pardon, doctor?" only while an alarm waits, then the nurse names the treatments; talk outside an alarm is ignored | Test with wrong and unclear words and sentences ([tests.md](docs/tests.md#vitals-monitor-and-the-nurse)) | 🟡 |
+| P5 | Graceful recovery from misheard speech | Confidence threshold, "Pardon?", hint with fitting commands, `cancel`, button fallback; "Pardon, doctor?" only while an alarm waits, then the nurse says how to order; a drug without an amount gets the standard dose; talk outside an alarm is ignored | Test with wrong and unclear words and sentences ([tests.md](docs/tests.md#vitals-monitor-and-the-nurse)) | 🟡 |
 | P6 | Response within 3–5 s after speech ends | Target under 1 s; pre-rendered replies | Median and worst value over 20 tries. So far on the board with synthetic voices (14 Nov): calls 87 ms median, free sentences through Whistle + Needle 790 ms median, 1860 ms worst (32 cases). People still to measure | 🟡 |
 | P7 | Local within 4 GB RAM; no stored audio; no cloud | Covered by C1 and C2 | Evidence from C1 and C2 | ⬜ |
 | P8 | Available peripherals and open-source components; latency and energy measured | Modulinos, headset, display; open models; measurement plan | Measured values in the README | ⬜ |
@@ -644,7 +648,7 @@ Sources: the event constraints and our proposed team requirements from the hacka
 | --- | --- | --- | --- | --- |
 | T1 | Feasible for four people in 24 hours, in parallel areas with clear interfaces | [Work split](#work-split) and [interface tables](#interfaces-agree-on-these-first-so-we-can-work-in-parallel) | Interfaces agreed at M0 | ⬜ |
 | T2 | Value and a clear success visible in two minutes | [Demo script](#demo-script-2-minutes) | Rehearsed run under 2:00 | ⬜ |
-| T3 | Minimum version without an unrestricted LLM | The default configuration uses no language model; patient and nurse lines are scripted; the vitals monitor works with the treatment names and keys 5–7. Optional: Needle, which can only choose one of three tool calls | The app runs every feature with `cactus-compute` not installed. So far: the default config never imports it; 18/32 synthetic cases without a model, all of them commands and named treatments (14 Nov) | 🟡 |
+| T3 | Minimum version without an unrestricted LLM | The default configuration uses no language model; patient and nurse lines are scripted; the vitals monitor works with the drug names (standard doses) and keys 5–7. Optional: Needle, which can only call one of three tools with an amount | The app runs every feature with `cactus-compute` not installed. So far: the default config never imports it; without a model, commands and named drugs work in the synthetic run, amounts do not (14 Nov) | 🟡 |
 | T4 | Optional features only after the core works | Core-first rule in the [milestones](#milestones) | Optional work starts only after M1 | ⬜ |
 | T5 | First milestone: spoken input gives a local spoken response on the board; then measure latency | M0 | Test log with latency | ⬜ |
 
