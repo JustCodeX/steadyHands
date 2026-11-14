@@ -36,10 +36,10 @@ That leaves 20 s of buffer. The speaker notes (`N`) hold a script for each slide
 
 ## Video
 
-`media/demo.mp4` is the first 45 s of the phone recording `IMG_4590.mp4`: turned upright, and cut to 16:9 with a crop that follows the game screen, so the screen stays readable. H.264, 1920×1080, with sound. `media/demo-poster.jpg` is its frame at 0:21; it stands in for the video in the PDF and before the video starts.
+`media/demo.mp4` is the first 45 s of the phone recording `IMG_4590.mp4`, the full frame as filmed (16:9, no crop, no zoom), scaled to 1920×1080, H.264 with sound. `media/demo-poster.jpg` is its frame at 0:21; it stands in for the video in the PDF and before the video starts.
 
 ```sh
-python make_video.py ~/Downloads/IMG_4590.mp4   # needs ffmpeg and numpy
+python make_video.py ~/Downloads/IMG_4590.mp4   # needs ffmpeg
 ```
 
 ## PowerPoint
