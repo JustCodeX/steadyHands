@@ -219,6 +219,19 @@ class GameEngine(Service):
             self.state = GameState.PLAYING
             self.bus.publish(GameEvent(kind="resumed"))
 
+    def abandon_round(self) -> None:
+        """Leave a paused round for the menu, without a result screen."""
+        if self.state is not GameState.PAUSED:
+            return
+        if self.quiz.abandon():
+            self.bus.publish(QuestionClosed())
+        self._set_instruction_window(False)
+        self.metrics.end()
+        self._pos_prev = None
+        self._pos_target = None
+        self.enter_menu()
+        log.info("round abandoned from the pause screen")
+
     def toggle_mode(self) -> None:
         self.mode = SoloMode() if isinstance(self.mode, CoopMode) else CoopMode(self.cfg.coop_callback_window_s)
         self.say(f"Mode: {self.mode.name}", 2)
@@ -269,9 +282,9 @@ class GameEngine(Service):
                 self.pause()
             elif pressed & InputFrame.BTN_A:
                 self._try_grab(manual=True)
-            elif pressed & InputFrame.BTN_C:
-                self._handover(time.monotonic())
             elif pressed & InputFrame.BTN_KNOB:
+                self._handover(time.monotonic())
+            elif pressed & InputFrame.BTN_C:
                 self._switch_on_light(time.monotonic())
         elif self.state is GameState.PAUSED:
             if knob_delta:
@@ -281,6 +294,8 @@ class GameEngine(Service):
                 )
             if pressed & InputFrame.BTN_B:
                 self.resume()
+            elif pressed & InputFrame.BTN_A:
+                self.abandon_round()
         elif self.state is GameState.RESULT:
             if pressed & InputFrame.BTN_A:
                 self.enter_menu()
@@ -560,6 +575,13 @@ class GameEngine(Service):
         other than the wall and is dropped.
         """
         assert self.level is not None
+        # Freeze key on the remote: while it is held the tool stays put and the
+        # hand can be brought back to a comfortable spot, like lifting a mouse
+        # off the pad. Dropping the reference is what makes the release silent -
+        # movement then starts again from wherever the hand now is.
+        if frame.buttons & self.cfg.freeze_buttons:
+            self._pos_prev = None
+            return
         # The axes are independent: one sensor losing its echo must not freeze
         # the other, it only stops contributing until it sees the wall again.
         prev_x, prev_y = self._pos_prev if self._pos_prev is not None else (None, None)

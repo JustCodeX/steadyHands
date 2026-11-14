@@ -71,6 +71,9 @@ class GameConfig:
     # the deadband's discrete steps come out as one continuous motion rather
     # than as jumps. Seconds to close the gap; larger is smoother but lags.
     position_smooth_tau_s: float = 0.22
+    # Buttons on the remote that hold the tool still while pressed. 0x0F is
+    # any of the four, so whichever key is wired works.
+    freeze_buttons: int = 0x0F
     # Flip an axis when the sensor faces the opposite way to the screen axis.
     position_invert_x: bool = False
     position_invert_y: bool = True

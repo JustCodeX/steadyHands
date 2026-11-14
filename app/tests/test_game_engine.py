@@ -195,13 +195,13 @@ def test_knob_sets_the_speed_while_paused(engine):
     assert engine.snapshot().sensitivity == engine.sensitivity
 
 
-def test_knob_press_switches_on_the_light(engine):
+def test_button_c_switches_on_the_light(engine):
     engine.start_round()
-    turn_knob(engine, 0, buttons=InputFrame.BTN_KNOB)
+    turn_knob(engine, 0, buttons=InputFrame.BTN_C)
     assert "light" not in kinds(engine)  # this level has no dark zone
     engine.level.dark_zones = [(0, 0, 50, 50)]
     turn_knob(engine, 0)
-    turn_knob(engine, 0, buttons=InputFrame.BTN_KNOB)
+    turn_knob(engine, 0, buttons=InputFrame.BTN_C)
     assert "light" in kinds(engine)
     snap = engine.snapshot()
     assert snap.lit and snap.light_left > 0

@@ -89,13 +89,18 @@ class RemoteInput(Service):
             self.bus.publish(frame)
 
     def _parse(self, data: bytes) -> InputFrame | None:
-        """{"x": <mm>, "y": <mm>, "ok": <sensor bits>, "seq": <n>}"""
+        """{"x": <mm>, "y": <mm>, "ok": <sensor bits>, "b": <buttons>, "seq": <n>}
+
+        The buttons are the remote's own: holding one freezes the tool, see
+        GameEngine._move_absolute. They never reach the game's button handling.
+        """
         try:
             msg = json.loads(data.decode("utf-8"))
             return InputFrame(
                 distance_mm=int(msg.get("x", 0)),
                 distance_y_mm=int(msg.get("y", 0)),
                 sensors_ok=int(msg.get("ok", 0)),
+                buttons=int(msg.get("b", 0)),
                 seq=int(msg.get("seq", 0)),
                 source="remote",
             )

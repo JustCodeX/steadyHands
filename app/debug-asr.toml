@@ -1,8 +1,14 @@
-# Board 1 (geil): game, display, microphone, buttons and knob.
+# Board 1 (geil): game, display, microphone, speaker, buttons and knob.
 # The two distance sensors live on the remote (maxuno) and arrive over UDP.
 
 [voice]
 debug_asr = true
+# Microphone and speaker are separate USB devices now. Both ALSA names carry
+# "USB Audio", so each has to be picked by the part that is unique to it.
+input_device = "Headphone Set"
+
+[audio]
+output_device = ""  # ALSA default from ~/.asoundrc points at the USB speaker
 
 [display]
 debug_panel = true

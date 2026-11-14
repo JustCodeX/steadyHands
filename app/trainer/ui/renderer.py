@@ -221,6 +221,9 @@ class Renderer(Service):
                 value = f"{mm:4d} mm  {axis:+.2f}"
             self.fonts.draw(s, "small", f"{label} {value}", colour, (x, y))
             y += 22
+        if self.remote_frame is not None and self.remote_frame.buttons:
+            self.fonts.draw(s, "small", "FREEZE (key held)", theme.ACCENT, (x, y))
+            y += 22
         # Tells the operator what to do while the two 0x29 sensors sort themselves out.
         if f.sensors_ok & InputFrame.SENSOR_TOF_CLASH:
             self.fonts.draw(s, "small", "2 chips on 0x29:", theme.BAD, (x, y))

@@ -87,7 +87,7 @@ def test_surgeon_calls_and_the_assistant_hands_over(coop):
     assert (snap.pending_call, snap.nurse_selection) == ("clamp", "forceps")
     coop.on_input(InputFrame(knob=2))  # forceps -> swab -> clamp
     assert coop.tool.word == "forceps" and coop.snapshot().nurse_selection == "clamp"
-    press(coop, InputFrame.BTN_C, knob=2)
+    press(coop, InputFrame.BTN_KNOB, knob=2)
     assert coop.tool.word == "clamp"
     assert coop.metrics.calls_correct == 1 and coop.metrics.calls_wrong == 0
     assert coop.snapshot().pending_call == ""
@@ -98,7 +98,7 @@ def test_handing_over_the_wrong_instrument_counts_as_a_wrong_call(coop):
     coop.on_input(InputFrame(knob=0))
     coop.on_command(CommandEvent(word="clamp"))
     coop.on_input(InputFrame(knob=1))  # the assistant picks the swab
-    press(coop, InputFrame.BTN_C, knob=1)
+    press(coop, InputFrame.BTN_KNOB, knob=1)
     assert coop.tool.word == "forceps"
     assert coop.metrics.calls_wrong == 1
     assert kinds(coop)[-1] == "wrong_tool"
@@ -108,7 +108,7 @@ def test_handing_over_the_wrong_instrument_counts_as_a_wrong_call(coop):
 def test_without_a_call_the_assistant_cannot_change_the_instrument(coop):
     coop.on_input(InputFrame(knob=0))
     coop.on_input(InputFrame(knob=2))
-    press(coop, InputFrame.BTN_C, knob=2)
+    press(coop, InputFrame.BTN_KNOB, knob=2)
     assert coop.tool.word == "forceps"
     assert coop.metrics.calls_wrong == 0
     assert coop.message == "No instrument was called"
@@ -122,7 +122,7 @@ def test_a_new_round_puts_the_assistants_choice_back_on_the_forceps(coop):
     assert coop.snapshot().nurse_selection == "forceps"
 
 
-def test_solo_knob_and_button_c_still_change_the_instrument(tmp_path):
+def test_solo_knob_turn_and_press_still_change_the_instrument(tmp_path):
     bus = EventBus()
     eng = GameEngine(bus, GameConfig(), OpenCatalog(tmp_path), 200, 120)
     eng.start()
@@ -130,6 +130,6 @@ def test_solo_knob_and_button_c_still_change_the_instrument(tmp_path):
     eng.on_input(InputFrame(knob=0))
     eng.on_input(InputFrame(knob=1))
     assert eng.tool.word == "swab"
-    eng.on_input(InputFrame(buttons=InputFrame.BTN_C, knob=1))
+    eng.on_input(InputFrame(buttons=InputFrame.BTN_KNOB, knob=1))
     assert eng.tool.word == "clamp"
     assert eng.snapshot().nurse_selection == ""

@@ -36,13 +36,13 @@ class PauseOverlay:
             rows = [
                 (None, "Tilt the instrument", "move"),
                 (self.glyphs.knob(34), "Turn the knob", "choose the instrument"),
-                (self.glyphs.knob(34, press=True), "Press the knob", "light in dark areas"),
+                (self.glyphs.knob(34, press=True), "Press the knob", "next instrument"),
                 (self.glyphs.button("A", 34), "Button A", "use it, or just hold still for 1 s"),
-                (self.glyphs.button("C", 34), "Button C", "next instrument"),
+                (self.glyphs.button("C", 34), "Button C", "light in dark areas"),
             ]
             if coop:  # the assistant picks and hands over what the surgeon called
                 rows[1] = (rows[1][0], "Turn the knob", "assistant: pick the called instrument")
-                rows[4] = (rows[4][0], "Button C", "assistant: hand it over")
+                rows[2] = (rows[2][0], "Press the knob", "assistant: hand it over")
             y = 84
             for glyph, what, effect in rows:
                 if glyph is not None:
@@ -51,11 +51,21 @@ class PauseOverlay:
                 self.fonts.draw(card, "body", effect, theme.MUTED, (318, y + 17), anchor="midleft")
                 y += 44
             pygame.draw.line(card, theme.PANEL_LINE, (40, 306), (self.W - 40, 306), 2)
-            hint = self.fonts.text("body", "to continue", theme.TEXT)
-            b = self.glyphs.button("B", 34)
-            left = (self.W - b.get_width() - 10 - hint.get_width()) // 2
-            card.blit(b, (left, self.H - 50))
-            card.blit(hint, (left + b.get_width() + 10, self.H - 50 + 17 - hint.get_height() // 2))
+            # Two ways out of the pause screen, side by side on one line.
+            cont = self.fonts.text("body", "to continue", theme.TEXT)
+            quit_ = self.fonts.text("body", "back to the menu", theme.TEXT)
+            b, a = self.glyphs.button("B", 34), self.glyphs.button("A", 34)
+            gap = 36
+            total = b.get_width() + 10 + cont.get_width() + gap + a.get_width() + 10 + quit_.get_width()
+            x = (self.W - total) // 2
+            baseline = self.H - 50
+            card.blit(b, (x, baseline))
+            x += b.get_width() + 10
+            card.blit(cont, (x, baseline + 17 - cont.get_height() // 2))
+            x += cont.get_width() + gap
+            card.blit(a, (x, baseline))
+            x += a.get_width() + 10
+            card.blit(quit_, (x, baseline + 17 - quit_.get_height() // 2))
             self._cards[coop] = card
         return self._cards[coop]
 

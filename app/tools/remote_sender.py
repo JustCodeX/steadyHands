@@ -35,13 +35,14 @@ def main(argv: list[str] | None = None) -> int:
 
     from arduino.router_bridge import Bridge
 
-    latest: dict[str, int] = {"x": 0, "y": 0, "ok": 0}
+    latest: dict[str, int] = {"x": 0, "y": 0, "ok": 0, "b": 0}
 
     def on_input(tilt_x, tilt_y, knob, buttons, distance_mm, distance_y_mm, sensors_ok, seq) -> None:
         # Runs on the Bridge dispatcher thread: only store, never send here.
         latest["x"] = int(distance_mm)
         latest["y"] = int(distance_y_mm)
         latest["ok"] = int(sensors_ok)
+        latest["b"] = int(buttons)  # the remote's own buttons: the freeze key
 
     bridge = Bridge(args.router)
     bridge.provide("input", on_input)
@@ -57,7 +58,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         while True:
             seq += 1
-            payload = json.dumps({"x": latest["x"], "y": latest["y"], "ok": latest["ok"], "seq": seq})
+            payload = json.dumps(
+                {"x": latest["x"], "y": latest["y"], "ok": latest["ok"], "b": latest["b"], "seq": seq}
+            )
             try:
                 sock.sendto(payload.encode("utf-8"), (args.to, args.port))
             except OSError as exc:
