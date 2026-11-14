@@ -129,13 +129,18 @@ bool PositionAxis::stale(uint32_t nowMs) const {
 // reading instead would move it by the whole deadband at once and then sit
 // still until the next breakout - a staircase rather than a movement. Noise
 // smaller than the band still never moves anything.
-void PositionSensor::feed(PositionAxis& axis, ToFReader& tof, uint32_t nowMs) {
+void PositionSensor::feed(PositionAxis& axis, ToFReader& tof, bool& found, uint32_t nowMs) {
   if (!tof.poll()) {
     // Silent for a while although the chip is still there: kick its ranging.
+    // A chip that will not even re-init at the address it already has is gone
+    // - unplugged, or knocked off the chain. Drop the flag, or the panel keeps
+    // reporting a sensor that is not there and bringUp() never looks for it
+    // again. A hand out of range does not get here: the chip still answers,
+    // it just has no echo, so the re-init succeeds and the flag stays.
     if (axis.lastGoodMs != 0 && nowMs - axis.lastGoodMs > cfg::POS_REVIVE_MS &&
         nowMs - axis.lastRestartMs > cfg::POS_REVIVE_MS) {
       axis.lastRestartMs = nowMs;
-      tof.restart();
+      if (!tof.restart()) found = false;
     }
     return;
   }
@@ -161,8 +166,8 @@ void PositionSensor::update(uint32_t nowMs) {
   }
   if (nowMs - lastPollMs_ < 1000 / cfg::SLOW_HZ) return;
   lastPollMs_ = nowMs;
-  if (foundX_) feed(axisX_, tofX_, nowMs);
-  if (foundY_) feed(axisY_, tofY_, nowMs);
+  if (foundX_) feed(axisX_, tofX_, foundX_, nowMs);
+  if (foundY_) feed(axisY_, tofY_, foundY_, nowMs);
 }
 
 void PositionSensor::fill(InputFrame& frame) {

@@ -120,7 +120,10 @@ void loop() {
   if (now - lastReportMs >= 1000) {
     lastReportMs = now;
     report();
-    if (sh::cfg::CONTROL_MODE == 2 && !positionSensor.ok()) {
+    // Only every tenth report: the scan walks 112 addresses, and that is a lot
+    // of traffic on a bus someone is about to plug a module into.
+    static uint8_t scanTick = 0;
+    if (sh::cfg::CONTROL_MODE == 2 && !positionSensor.ok() && (++scanTick % 10) == 0) {
       scanBus("  i2c Wire1 (Qwiic):", Wire1);
       Monitor.print(positionSensor.viaHub() ? "  via Modulino Hub" : "  plain chain");
       if (positionSensor.clash()) Monitor.print("  CLASH: two chips on 0x29");

@@ -59,7 +59,7 @@ private:
   static bool healthy(uint16_t modelId);
   bool haveXshutWire() const;
   void bringUp();
-  void feed(PositionAxis& axis, ToFReader& tof, uint32_t nowMs);
+  void feed(PositionAxis& axis, ToFReader& tof, bool& found, uint32_t nowMs);
 
   ToFReader tofX_;
   ToFReader tofY_;
