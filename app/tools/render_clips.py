@@ -25,12 +25,15 @@ def main() -> int:
     p.add_argument("--voice", default=cfg.audio.piper_voice)
     p.add_argument("--out", default=cfg.audio.clips_dir)
     p.add_argument("--force", action="store_true")
+    p.add_argument("--force-nurse", action="store_true", help="render the nurse's clips again (after adding her voice)")
+    p.add_argument("--nurse-voice", default=cfg.audio.nurse_voice)
     args = p.parse_args()
     logging.basicConfig(level=logging.INFO)
     questions = QuestionBank.load(cfg.quiz.questions_file)
-    renderer = TtsRenderer(args.out, args.engine, args.voice, questions)
+    renderer = TtsRenderer(args.out, args.engine, args.voice, questions, args.nurse_voice)
+    print(f"nurse voice: {renderer.nurse_voice or 'none (the patient voice speaks her lines)'}")
     try:
-        n = renderer.render_all(force=args.force)
+        n = renderer.render_all(force=args.force, force_nurse=args.force_nurse)
     except Exception as exc:
         print(f"TTS failed with {args.engine}: {exc}", file=sys.stderr)
         if args.engine == "piper":

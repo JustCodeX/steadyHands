@@ -188,6 +188,9 @@ class AudioConfig:
     volume: float = 0.9
     tts_engine: str = "piper"  # setup only: "piper" | "espeak"
     piper_voice: str = str(APP_DIR / "models" / "piper" / "en_US-lessac-medium.onnx")
+    # The nurse's own voice, so the room hears two people. Without the file
+    # her lines are rendered with piper_voice. Setup only, like piper_voice.
+    nurse_voice: str = str(APP_DIR / "models" / "piper" / "en_GB-jenny_dioco-medium.onnx")
 
 
 @dataclass

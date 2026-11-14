@@ -98,14 +98,25 @@ def number_id(n: int) -> str:
     return f"n_{n}"
 
 
+def nurse_number_id(n: int) -> str:
+    """A number in the nurse's voice (the patient's are number_id)."""
+    n = max(0, min(MAX_NUMBER, int(round(n))))
+    return f"nn_{n}"
+
+
+def nurse_ids() -> set[str]:
+    """Every clip the nurse speaks: rendered with audio.nurse_voice."""
+    return set(NURSE_LINES) | {nurse_number_id(n) for n in range(MAX_NUMBER + 1)}
+
+
 def line_text(ids: list[str]) -> str:
     """What a sequence of nurse clips says, for the subtitle."""
     out = []
     for i in ids:
         if i in NURSE_LINES:
             out.append(NURSE_LINES[i])
-        elif i.startswith("n_"):
-            out.append(i[2:])
+        elif i.startswith(("n_", "nn_")):
+            out.append(i.split("_", 1)[1])
     return " ".join(out)
 
 
@@ -124,6 +135,7 @@ def all_lines(questions: QuestionBank | None = None) -> dict[str, str]:
     lines.update(NURSE_LINES)
     for n in range(MAX_NUMBER + 1):
         lines[number_id(n)] = str(n)
+        lines[nurse_number_id(n)] = str(n)
     for q in questions.questions if questions else []:
         lines[question_id(q.id)] = q.text
         if q.explain:

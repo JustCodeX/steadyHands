@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from ..core.events import RoundResult
-from .lines import explain_id, number_id, question_id
+from .lines import explain_id, number_id, nurse_number_id, question_id
 
 
 class PhraseBuilder:
@@ -54,7 +54,7 @@ class PhraseBuilder:
             return [f"alarm_{parts[0]}"]
         if kind == "vital_reminder":
             value = int(parts[1]) if len(parts) > 1 and parts[1].lstrip("-").isdigit() else None
-            return [f"remind_{parts[0]}"] + ([number_id(value), f"unit_{parts[0]}"] if value is not None else [])
+            return [f"remind_{parts[0]}"] + ([nurse_number_id(value), f"unit_{parts[0]}"] if value is not None else [])
         if kind == "vital_crisis":
             return ["crisis"]
         if kind == "vital_stable":

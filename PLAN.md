@@ -111,6 +111,7 @@ A console along the bottom edge shows three values: oxygen saturation (SpO2), de
 - One episode at a time; none in the last 15 s of a round. Level 1 has none; from level 2 on, one to three (`vitals` in `level.json`).
 - Medically simplified on purpose: adrenaline stands in for whatever vasopressor an anaesthetist would choose, and the numbers are rounded.
 - The nurse's last line is shown as a subtitle next to the monitor: headset audio reaches only the wearer (D4).
+- The nurse has her own voice (Piper `en_GB-jenny_dioco-medium`, `audio.nurse_voice`), so the room hears two people. Her alarm lines last 1.5–1.7 s on the board.
 
 The vitals monitor replaced the quiz in the levels. The quiz below stays in the code and in the level files and is off by default (`quiz.enabled`); a question and an alarm are never open at the same time.
 

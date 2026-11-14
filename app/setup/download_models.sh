@@ -22,6 +22,14 @@ if [[ ! -f "$MODELS/piper/$VOICE.onnx" ]]; then
   curl -L --fail -o "$MODELS/piper/$VOICE.onnx" "$BASE/$VOICE.onnx"
   curl -L --fail -o "$MODELS/piper/$VOICE.onnx.json" "$BASE/$VOICE.onnx.json"
 fi
+# The nurse's own voice (vitals monitor). Without it her lines use the patient's voice.
+NURSE=en_GB-jenny_dioco-medium
+NURSE_BASE="https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/jenny_dioco/medium"
+if [[ ! -f "$MODELS/piper/$NURSE.onnx" ]]; then
+  echo "Downloading Piper voice $NURSE for the nurse (about 60 MB)"
+  curl -L --fail -o "$MODELS/piper/$NURSE.onnx" "$NURSE_BASE/$NURSE.onnx"
+  curl -L --fail -o "$MODELS/piper/$NURSE.onnx.json" "$NURSE_BASE/$NURSE.onnx.json"
+fi
 # Optional: the Cactus models (app/cactus.toml). WITH_CACTUS=1 setup/download_models.sh
 # Needs `pip install -r requirements-cactus.txt` in the app's venv first.
 if [[ "${WITH_CACTUS:-0}" == "1" ]]; then
