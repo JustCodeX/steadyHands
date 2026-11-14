@@ -24,3 +24,6 @@ app/logs/*.csv
 
 # Hand-over notes can hold board passwords
 handoff-*.md
+
+# Pitch .pptx embeds the video (50-60 MB): shipped as a GitHub release asset, not in git
+pitch/*.pptx

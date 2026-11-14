@@ -1,0 +1,685 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Steady Hands Pitch</title>
+<style>
+  /* The app's own fonts (app/assets/fonts, SIL Open Font License 1.1) */
+  @font-face { font-family: "Lilita One"; src: url("fonts/LilitaOne-Regular.ttf") format("truetype"); font-display: block; }
+  @font-face { font-family: "Varela Round"; src: url("fonts/VarelaRound-Regular.ttf") format("truetype"); font-display: block; }
+
+  /* The app's colours (app/trainer/ui/theme.py) */
+  :root {
+    --room: #12363e;        /* ROOM */
+    --room-line: #18424a;   /* ROOM_LINE */
+    --room-light: 40, 104, 108; /* ROOM_LIGHT */
+    --dark: #05060a;        /* DARK */
+    --panel: #16202e;       /* PANEL */
+    --panel-light: #283648; /* PANEL_LIGHT */
+    --panel-line: #3e5066;  /* PANEL_LINE */
+    --paper: #fcf6e8;       /* PAPER */
+    --paper-line: #ded4be;  /* PAPER_LINE */
+    --ink: #2c3442;         /* INK */
+    --text: #f0f4f8;        /* TEXT */
+    --muted: #96a4b6;       /* MUTED */
+    --sub: #b0d6d8;         /* menu subtitle */
+    --accent: #5ac8fa;      /* ACCENT */
+    --good: #54d080;        /* GOOD */
+    --warn: #ffc442;        /* WARN */
+    --bad: #f05252;         /* BAD */
+    --outline: #1e2636;     /* OUTLINE */
+    --shadow: #0a2026;      /* card shadow */
+    --won: #1e945c;         /* result card, won */
+    --forceps: #6eaaff; --swab: #ec606e; --clamp: #ff9632; --scalpel: #ba84ff;
+    --display: "Lilita One", "Arial Rounded MT Bold", system-ui, sans-serif;
+    --body: "Varela Round", "Arial Rounded MT", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  html, body { margin: 0; height: 100%; background: var(--dark); overflow: hidden; }
+  body { font-family: var(--body); color: var(--text); -webkit-font-smoothing: antialiased; }
+
+  #stage {
+    position: absolute; left: 50%; top: 50%;
+    width: 1600px; height: 900px;
+    transform: translate(-50%, -50%) scale(var(--scale, 1));
+    transform-origin: center center;
+  }
+
+  /* --- a slide: the operating-room floor under the lamp (ui/art/backdrop.py) --- */
+  .slide {
+    position: absolute; inset: 0; display: none; overflow: hidden;
+    background-color: var(--room);
+    background-image:
+      radial-gradient(ellipse 62% 58% at 50% 14%, rgba(var(--room-light), .85), rgba(var(--room-light), 0) 72%),
+      linear-gradient(var(--room-line) 3px, transparent 3px),
+      linear-gradient(90deg, var(--room-line) 3px, transparent 3px);
+    background-size: 100% 100%, 100px 100px, 100px 100px;
+    background-position: 0 0, -2px -2px, -2px -2px;
+  }
+  .slide.active { display: block; }
+  .pad { position: absolute; inset: 0 0 64px 0; padding: 52px 80px 0; box-sizing: border-box; }
+
+  h1, h2, .display { font-family: var(--display); font-weight: 400; margin: 0; }
+  .title { font-size: 66px; line-height: 1.05; color: var(--text); text-shadow: 4px 5px 0 var(--outline); letter-spacing: .3px; }
+  .lead { font-size: 30px; line-height: 1.35; color: var(--sub); margin: 14px 0 0; max-width: 1300px; }
+  .muted { color: var(--muted); }
+
+  /* --- cards like the menu's level cards and the result clipboard --- */
+  .paper { background: var(--paper); color: var(--ink); border: 3px solid var(--paper-line); border-radius: 28px; box-shadow: 0 9px 0 var(--shadow); }
+  .panel { background: var(--panel); color: var(--text); border: 3px solid var(--panel-line); border-radius: 28px; box-shadow: 0 9px 0 var(--shadow); }
+  .panel.sel { border: 5px solid var(--accent); }
+  .badge {
+    flex: none; width: 60px; height: 60px; border-radius: 50%; box-sizing: border-box;
+    background: var(--paper); border: 5px solid var(--outline);
+    display: grid; place-items: center; font-family: var(--display); font-size: 30px; color: var(--ink);
+  }
+  .badge.on { background: var(--accent); }
+
+  /* the 7-inch display around a screenshot */
+  .screen { background: var(--dark); padding: 14px; border-radius: 24px; border: 3px solid var(--panel-line); box-shadow: 0 10px 0 var(--shadow); }
+  .screen img { display: block; width: 100%; border-radius: 8px; }
+
+  /* who says what: like the nurse's subtitle next to the monitor */
+  .say { font-size: 28px; line-height: 1.3; }
+  .who { font-family: var(--display); color: var(--accent); margin-right: 10px; }
+  .who.surgeon { color: var(--warn); }
+  .q { color: var(--text); }
+  .paper .q { color: var(--ink); }
+
+  code.call {
+    font-family: var(--mono); font-size: 25px; color: var(--accent);
+    background: var(--dark); border: 2px solid var(--panel-line); border-radius: 12px; padding: 6px 12px; white-space: nowrap;
+  }
+  code.call b { color: var(--warn); font-weight: 500; }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-size: 24px; color: var(--text); background: var(--panel); border: 3px solid var(--panel-line);
+    border-radius: 999px; padding: 8px 20px; box-shadow: 0 6px 0 var(--shadow);
+  }
+  .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--good); flex: none; }
+
+  /* a monitor tile from the vitals console (ui/vitals_console.py) */
+  .tile {
+    background: var(--panel); border: 4px solid var(--good); border-radius: 20px; box-shadow: 0 8px 0 var(--shadow);
+    padding: 18px 24px; box-sizing: border-box; display: flex; flex-direction: column;
+  }
+  .tile .label { font-size: 26px; color: var(--text); }
+  .tile .value { font-family: var(--display); font-size: 84px; line-height: 1; color: var(--good); margin-top: auto; text-align: right; }
+  .tile .value small { font-size: 40px; margin-left: 6px; }
+  .tile .note { font-size: 21px; color: var(--muted); margin-top: 4px; }
+  .tile.warn { border-color: var(--warn); } .tile.warn .value { color: var(--warn); }
+  .tile.bad { border-color: var(--bad); } .tile.bad .value { color: var(--bad); }
+  .tile.accent { border-color: var(--accent); } .tile.accent .value { color: var(--accent); }
+
+  .arrow { flex: none; width: 46px; height: 6px; background: var(--muted); border-radius: 3px; position: relative; margin: 0 22px 0 6px; }
+  .arrow::after { content: ""; position: absolute; right: -14px; top: 50%; transform: translateY(-50%); border-left: 18px solid var(--muted); border-top: 12px solid transparent; border-bottom: 12px solid transparent; }
+
+  /* --- footer: a strip like the app's console --- */
+  .footer {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 64px; box-sizing: border-box;
+    background: var(--panel); border-top: 3px solid var(--panel-line);
+    display: flex; align-items: center; gap: 14px; padding: 0 24px;
+  }
+  .footer img { width: 44px; height: 44px; }
+  .footer .brand { font-family: var(--display); font-size: 27px; }
+  .footer .team { margin-left: auto; font-size: 21px; color: var(--muted); }
+  .footer .num { font-family: var(--display); font-size: 24px; border: 3px solid var(--panel-line); border-radius: 12px; padding: 2px 14px; min-width: 64px; text-align: center; }
+  .footer .clock { font-family: var(--display); font-size: 24px; color: var(--muted); display: none; }
+  body.notes-on .footer .clock { display: block; }
+  .footer .clock.late { color: var(--warn); }
+
+  /* --- slide 1 --- */
+  .s-title { text-align: center; }
+  .s-title .big { font-size: 168px; line-height: 1; margin-top: 70px; text-shadow: 6px 8px 0 var(--outline); }
+  .s-title .lead { margin: 22px auto 0; font-size: 38px; }
+  .s-title .body { display: block; margin: 46px auto 0; width: 980px; }
+  .s-title .chips { display: flex; gap: 18px; justify-content: center; margin-top: 30px; }
+
+  /* --- slide 2 --- */
+  .three { display: grid; grid-template-columns: repeat(3, 1fr); gap: 36px; margin-top: 52px; }
+  .three .paper { padding: 30px 32px 34px; min-height: 330px; box-sizing: border-box; }
+  .three .head { display: flex; align-items: center; justify-content: space-between; }
+  .three h2 { font-size: 44px; color: var(--ink); margin-top: 18px; }
+  .three p { font-size: 27px; line-height: 1.4; margin: 12px 0 0; }
+  .three img { width: 78px; height: 78px; }
+  .banner { margin-top: 46px; padding: 22px 32px; font-size: 29px; line-height: 1.35; display: flex; align-items: center; gap: 22px; }
+  .banner img { width: 70px; height: 70px; flex: none; }
+
+  /* --- slide 3 --- */
+  .round { display: grid; grid-template-columns: 800px 1fr; gap: 40px; margin-top: 30px; align-items: start; }
+  .steps { display: flex; flex-direction: column; gap: 16px; }
+  .step { display: flex; gap: 18px; align-items: flex-start; padding: 14px 20px; }
+  .step .icon { flex: none; width: 72px; height: 72px; border-radius: 50%; background: var(--paper); border: 5px solid var(--outline); display: grid; place-items: center; box-sizing: border-box; }
+  .step .icon img { width: 52px; height: 52px; }
+  .step h2 { font-size: 30px; }
+  .step p { font-size: 22px; line-height: 1.34; margin: 4px 0 0; color: var(--text); }
+  .step p.say { font-size: 24px; }
+  .caption { font-size: 22px; color: var(--muted); margin-top: 16px; text-align: center; }
+
+  /* --- slide 4: the demo video, 16:9 --- */
+  .video-frame {
+    position: absolute; left: 50%; top: 76px; transform: translateX(-50%);
+    width: 1300px; height: 744px; box-sizing: border-box;
+  }
+  .video-frame video { position: absolute; inset: 14px; width: calc(100% - 28px); height: calc(100% - 28px); background: #000; border-radius: 8px; object-fit: contain; display: none; }
+  .video-frame.ready video { display: block; }
+  .video-frame .print-poster { display: none; }
+  .video-frame .placeholder {
+    position: absolute; inset: 14px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+    background:
+      radial-gradient(ellipse 60% 55% at 50% 40%, rgba(var(--room-light), .55), transparent 70%),
+      repeating-linear-gradient(0deg, transparent 0 98px, var(--room-line) 98px 100px),
+      repeating-linear-gradient(90deg, transparent 0 98px, var(--room-line) 98px 100px),
+      var(--room);
+  }
+  .video-frame.ready .placeholder { display: none; }
+  .play { width: 150px; height: 150px; border-radius: 50%; background: var(--paper); border: 7px solid var(--outline); position: relative; box-shadow: 0 9px 0 var(--shadow); }
+  .play::after { content: ""; position: absolute; left: 56px; top: 38px; border-left: 58px solid var(--ink); border-top: 36px solid transparent; border-bottom: 36px solid transparent; }
+  .placeholder .display { font-size: 74px; text-shadow: 4px 5px 0 var(--outline); }
+  .placeholder .hint { font-size: 26px; color: var(--muted); }
+  .placeholder .hint code { font-family: var(--mono); color: var(--accent); }
+  .demo-tag { position: absolute; left: 0; top: -62px; z-index: 2; }
+  .video-hint { position: absolute; right: 30px; bottom: 34px; z-index: 2; display: none; }
+  .video-frame.ended .video-hint, .video-frame.blocked .video-hint { display: inline-flex; }
+
+  /* --- slide 5: steering with two distance sensors --- */
+  .steer { display: grid; grid-template-columns: 620px 1fr; gap: 34px; margin-top: 26px; }
+  .room-card { padding: 14px 16px 12px; }
+  .room-card svg { display: block; width: 584px; height: 438px; }
+  .room-card .cap { font-size: 21px; line-height: 1.3; margin: 6px 6px 0; color: var(--ink); }
+  svg .lbl { font-family: var(--display); font-size: 25px; }
+  svg .small { font-family: var(--body); font-size: 19px; }
+  .map { padding: 18px 24px 20px; }
+  .map h2 { font-size: 30px; color: var(--ink); margin-bottom: 10px; }
+  .map-row { display: grid; grid-template-columns: 52px 190px 46px 1fr; align-items: center; gap: 0 14px; padding: 7px 0; border-top: 3px solid var(--paper-line); font-size: 24px; }
+  .map-row .mv { width: 46px; height: 46px; border-radius: 50%; background: var(--panel); color: var(--good); display: grid; place-items: center; font-family: var(--display); font-size: 30px; }
+  .map-row .arrow { width: 26px; margin: 0 10px 0 0; height: 5px; background: var(--paper-line); }
+  .map-row .arrow::after { border-left-color: var(--paper-line); right: -12px; border-left-width: 15px; border-top-width: 10px; border-bottom-width: 10px; }
+  .map-row b { font-weight: 400; font-family: var(--display); font-size: 25px; color: var(--ink); background: #ffe7a8; border-radius: 12px; padding: 4px 12px; justify-self: start; }
+  .map-row .grow { color: #b03434; }
+  .tips { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }
+  .tips .panel { padding: 16px 20px; }
+  .tips h2 { font-size: 27px; color: var(--accent); }
+  .tips p { font-size: 21px; line-height: 1.34; margin: 6px 0 0; }
+
+  /* --- slide 5: two speech paths --- */
+  .lanes { display: flex; flex-direction: column; gap: 26px; margin-top: 34px; }
+  .lanes .lane { padding: 18px 28px 22px; }
+  .lane-head { display: flex; align-items: center; justify-content: space-between; }
+  .lane-name { font-family: var(--display); font-size: 32px; color: var(--accent); }
+  .speed { font-family: var(--display); font-size: 30px; color: var(--good); }
+  .lt { font-family: var(--body); font-style: normal; }
+  .speed span { font-family: var(--body); font-size: 22px; color: var(--muted); margin-left: 10px; }
+  .flow { display: flex; align-items: center; margin-top: 14px; }
+  .node { padding: 14px 20px; box-sizing: border-box; border-radius: 20px; }
+  .node.box { background: var(--panel-light); border: 3px solid var(--panel-line); }
+  .node h2 { font-size: 30px; }
+  .node p { font-size: 20px; color: var(--muted); margin: 4px 0 0; line-height: 1.3; }
+  .node.quote { background: var(--paper); color: var(--ink); border: 3px solid var(--paper-line); box-shadow: 0 7px 0 var(--shadow); font-size: 28px; line-height: 1.3; }
+  .outs { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+  .outs code.call { font-size: 23px; }
+  .rules { display: flex; gap: 16px; margin-top: 34px; }
+  .rules .chip { font-size: 22px; white-space: nowrap; }
+
+  /* --- slide 6: dosing --- */
+  .strip { width: 1440px; height: 79px; overflow: hidden; border-radius: 14px; border: 3px solid var(--panel-line); box-shadow: 0 8px 0 var(--shadow); margin-top: 30px; }
+  .strip img { display: block; width: 1440px; margin-top: -765px; }
+  .dose { display: grid; grid-template-columns: 560px 1fr; gap: 40px; margin-top: 40px; }
+  .chart { padding: 24px 34px 26px; }
+  .chart h2 { font-size: 34px; color: var(--ink); margin-bottom: 8px; }
+  .row { display: flex; align-items: baseline; border-bottom: 3px solid var(--paper-line); padding: 9px 0; font-size: 25px; }
+  .row b { font-family: var(--display); font-weight: 400; font-size: 32px; margin-left: auto; }
+  .row.order { border-bottom: 0; padding-top: 16px; }
+  .row.order b { color: var(--won); }
+  .outcomes { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .outcome { padding: 18px 22px; }
+  .outcome h2 { font-size: 30px; }
+  .outcome .say { font-size: 23px; margin-top: 8px; }
+  .outcome p { font-size: 21px; color: var(--muted); margin: 6px 0 0; }
+  .outcome.warn { border-color: var(--warn); } .outcome.warn h2 { color: var(--warn); }
+  .outcome.good { border-color: var(--good); } .outcome.good h2 { color: var(--good); }
+  .outcome.bad { border-color: var(--bad); } .outcome.bad h2 { color: var(--bad); }
+  .outcome.accent { border-color: var(--accent); } .outcome.accent h2 { color: var(--accent); }
+  .footnote { position: absolute; left: 80px; right: 80px; bottom: 90px; font-size: 22px; color: var(--muted); line-height: 1.4; }
+
+  /* --- slide 8: numbers --- */
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: 34px; }
+  .tiles .tile { height: 206px; padding: 16px 20px; }
+  .tiles .tile .label { font-size: 24px; }
+  .tiles .tile .note { font-size: 19px; }
+  .tiles .tile .value { font-size: 76px; }
+  .tiles .tile .value small { font-size: 34px; }
+  .tiles .tile .value small.of { font-family: var(--body); font-size: 24px; color: var(--muted); margin-left: 8px; }
+
+  /* --- slide 9 --- */
+  .next { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; margin-top: 44px; }
+  .next .panel { padding: 26px 30px; min-height: 180px; box-sizing: border-box; }
+  .next h2 { font-size: 34px; }
+  .next p { font-size: 24px; line-height: 1.4; margin: 12px 0 0; }
+  .thanks { display: flex; align-items: center; justify-content: center; gap: 34px; margin-top: 70px; }
+  .thanks img { width: 170px; height: 170px; }
+  .thanks .display { font-size: 108px; text-shadow: 5px 7px 0 var(--outline); }
+  .thanks .lead { margin: 4px 0 0; }
+
+  /* --- speaker notes (key N) --- */
+  #notes {
+    position: absolute; left: 0; right: 0; bottom: 64px; z-index: 10; display: none;
+    background: var(--dark); border-top: 3px solid var(--accent);
+    padding: 18px 34px 22px; box-sizing: border-box; max-height: 420px; overflow: auto;
+  }
+  body.notes-on #notes { display: block; }
+  #notes .meta { font-family: var(--display); font-size: 24px; color: var(--accent); }
+  #notes .text { font-size: 27px; line-height: 1.45; margin-top: 8px; color: var(--text); }
+  .speaker-notes { display: none; }
+
+  @media print {
+    @page { size: 1600px 900px; margin: 0; }
+    html, body { overflow: visible; height: auto; background: var(--room); }
+    #stage { position: static; transform: none !important; width: 1600px; height: auto; }
+    .slide { display: block !important; position: relative; width: 1600px; height: 900px; break-after: page; page-break-after: always; }
+    #notes, .placeholder .hint, .video-hint { display: none !important; }
+    .video-frame video, .video-frame .placeholder { display: none !important; }
+    .video-frame .print-poster { display: block !important; position: absolute; inset: 14px; width: calc(100% - 28px); height: calc(100% - 28px); object-fit: cover; border-radius: 8px; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <!-- 1 · Title ................................................................ -->
+  <section class="slide s-title" data-seconds="15" data-footer="no">
+    <h1 class="display big">Steady Hands</h1>
+    <p class="lead">A surgeon trainer you steer by hand and talk to. Fully offline on the Arduino UNO Q.</p>
+    <img class="body" src="media/patient-body.png" alt="The patient asleep on the operating table">
+    <div class="chips">
+      <span class="chip"><span class="dot"></span>Team Steady Hands</span>
+      <span class="chip">Speech-to-Speech Hackathon · Nürnberg</span>
+      <span class="chip">14 Nov 2026</span>
+    </div>
+    <div class="speaker-notes">Hi, we are team Steady Hands. This is our surgeon trainer: you steer with your hand and talk to it. Game, speech recognition, AI and voices all run offline on the Arduino UNO Q in front of you.</div>
+  </section>
+
+  <!-- 2 · Problem ............................................................... -->
+  <section class="slide" data-seconds="25">
+    <div class="pad">
+      <h1 class="title">In surgery, both hands are busy</h1>
+      <p class="lead">So the surgeon works by voice, and keeps the hand steady while talking.</p>
+      <div class="three">
+        <div class="paper">
+          <div class="head"><span class="badge on">1</span><img src="media/tool-forceps.png" alt=""></div>
+          <h2>Steady hand</h2>
+          <p>Precise movement through a narrow wound, against the clock.</p>
+        </div>
+        <div class="paper">
+          <div class="head"><span class="badge on">2</span><img src="media/tool-clamp.png" alt=""></div>
+          <h2>Clear calls</h2>
+          <p>Instruments are called by name, and the team hands over exactly that one.</p>
+        </div>
+        <div class="paper">
+          <div class="head"><span class="badge on">3</span><img src="media/face-alarmed.png" alt=""></div>
+          <h2>Orders with a dose</h2>
+          <p>Drug and amount for the anaesthesia nurse, without letting go of the instrument.</p>
+        </div>
+      </div>
+      <div class="panel sel banner">
+        <img src="media/face-asleep.png" alt="">
+        <div>Steady Hands trains all three at once, in one-minute rounds. <span class="muted">For medical students in the skills lab. No voice leaves the board.</span></div>
+      </div>
+    </div>
+    <div class="speaker-notes">In an operating room, the surgeon's hands are busy. Three things have to work at once: a steady hand, clear calls for instruments, and orders to the anaesthesia nurse, with a drug and a dose. Steady Hands trains all three in one-minute rounds, for medical students in the skills lab.</div>
+  </section>
+
+  <!-- 3 · One round: the game ................................................. -->
+  <section class="slide" data-seconds="40">
+    <div class="pad">
+      <h1 class="title">One round</h1>
+      <p class="lead">Beat the clock: pull the splinter, clamp the bleeding, swab the blood.</p>
+      <div class="round">
+        <div>
+          <div class="screen"><img src="media/alarm.png" alt="A round in level 4: the BIS tile is yellow, the nurse says: Doctor, he is waking up."></div>
+          <div class="caption">On the board's display: level 4, the anaesthesia is getting too light.</div>
+        </div>
+        <div class="steps">
+          <div class="panel step">
+            <div class="icon"><img src="media/tool-scalpel.png" alt=""></div>
+            <div><h2>Steer</h2><p>Move the remote. Touch a wall: buzz, pulse up. Three touches wake the patient.</p></div>
+          </div>
+          <div class="panel step">
+            <div class="icon"><img src="media/tool-clamp.png" alt=""></div>
+            <div><h2>Call</h2><p class="say"><span class="who surgeon">Surgeon</span><span class="q">“Clamp!”</span></p><p>Each target needs its own. Co-op: the assistant hands it over with the knob.</p></div>
+          </div>
+          <div class="panel step">
+            <div class="icon"><img src="media/face-alarmed.png" alt=""></div>
+            <div><h2>Order</h2><p class="say"><span class="who surgeon">Surgeon</span><span class="q">“Propofol 50.”</span></p><p class="say"><span class="who">Nurse</span><span class="q">“Propofol 50 milligrams.”</span></p></div>
+          </div>
+          <div class="panel step">
+            <div class="icon"><img src="media/face-happy.png" alt=""></div>
+            <div><h2>Score</h2><p>Time, wall contacts, steadiness, orders right. Six levels.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="speaker-notes">A round: clear the wound before the clock runs out. You steer the instrument with this remote. Touch a wall and it buzzes, the pulse goes up; three touches and the patient wakes up. Each target needs its instrument, so you call it: "Clamp!" In co-op mode your partner picks it with the knob and hands it over. From level two on, the monitor goes wrong: here the nurse says "Doctor, he is waking up". You order a drug and a dose, and she reads it back. At the end: time, contacts, steadiness, orders right.</div>
+  </section>
+
+  <!-- 4 · Demo video, 45 s ...................................................... -->
+  <section class="slide" data-seconds="50" data-video="yes">
+    <div class="video-frame screen" id="video-frame">
+      <span class="chip demo-tag"><span class="dot"></span>One round, live on the board · 0:45</span>
+      <video id="demo" playsinline preload="auto" poster="media/demo-poster.jpg"></video>
+      <img class="print-poster" src="media/demo-poster.jpg" alt="The game screen during a round, the remote next to it; the nurse says: Saturation is at 91 percent.">
+      <div class="placeholder">
+        <div class="play"></div>
+        <div class="display">Demo · 0:45</div>
+        <div class="hint">Save the video as <code>pitch/media/demo.mp4</code> and reload.</div>
+      </div>
+      <span class="chip video-hint" id="video-hint">Space: play / pause · → next slide</span>
+    </div>
+    <div class="speaker-notes">"Here is one round on the board, with sound." Then stay quiet: the video runs 45 seconds. What happens in it: the remote steers, no tilting; the surgeon calls "Swab!", "Clamp!", "Forceps!"; the nurse says "Saturation is at 91 percent" and the surgeon orders oxygen; a wall touch, the patient says "Hey, careful!"; a dark zone lights up when the assistant presses the knob. Space pauses and plays, the arrow key or the clicker moves on.</div>
+  </section>
+
+  <!-- 5 · Steering: two distance sensors ...................................... -->
+  <section class="slide" data-seconds="35">
+    <div class="pad">
+      <h1 class="title">The scalpel measures two distances</h1>
+      <p class="lead">The hand moves in a plane. Two laser sensors measure how far it is from two walls.</p>
+      <div class="steer">
+        <div class="paper room-card">
+          <svg viewBox="0 0 584 438" role="img" aria-label="The remote between two walls: sensor X measures the distance to the side wall, sensor Y the distance to the top wall.">
+            <defs>
+              <pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                <rect width="14" height="14" fill="#ded4be"/><line x1="0" y1="0" x2="0" y2="14" stroke="#2c3442" stroke-width="4"/>
+              </pattern>
+              <pattern id="floor" width="40" height="40" patternUnits="userSpaceOnUse" x="56" y="50">
+                <rect width="40" height="40" fill="#f3ead6"/><path d="M40 0H0V40" fill="none" stroke="#ded4be" stroke-width="2"/>
+              </pattern>
+              <marker id="ah-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+                <path d="M0 0L10 5L0 10z" fill="#f05252"/>
+              </marker>
+              <marker id="ah-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+                <path d="M0 0L10 5L0 10z" fill="#1e945c"/>
+              </marker>
+            </defs>
+            <!-- floor and the two walls -->
+            <rect x="56" y="50" width="520" height="380" fill="url(#floor)"/>
+            <rect x="20" y="14" width="556" height="36" rx="4" fill="url(#hatch)" stroke="#2c3442" stroke-width="3"/>
+            <rect x="20" y="14" width="36" height="416" rx="4" fill="url(#hatch)" stroke="#2c3442" stroke-width="3"/>
+            <rect x="436" y="62" width="128" height="34" rx="17" fill="#fcf6e8" stroke="#2c3442" stroke-width="2"/>
+            <text x="500" y="85" text-anchor="middle" class="small" fill="#2c3442">top wall</text>
+            <rect x="70" y="382" width="128" height="34" rx="17" fill="#fcf6e8" stroke="#2c3442" stroke-width="2"/>
+            <text x="134" y="405" text-anchor="middle" class="small" fill="#2c3442">side wall</text>
+            <!-- the two measured distances -->
+            <line x1="375" y1="56" x2="375" y2="196" stroke="#f05252" stroke-width="5" marker-start="url(#ah-red)" marker-end="url(#ah-red)"/>
+            <rect x="392" y="112" width="146" height="38" rx="12" fill="#fff" stroke="#f05252" stroke-width="3"/>
+            <text x="465" y="140" text-anchor="middle" class="lbl" fill="#f05252">Distance Y</text>
+            <line x1="62" y1="290" x2="276" y2="290" stroke="#f05252" stroke-width="5" marker-start="url(#ah-red)" marker-end="url(#ah-red)"/>
+            <rect x="96" y="236" width="146" height="38" rx="12" fill="#fff" stroke="#f05252" stroke-width="3"/>
+            <text x="169" y="264" text-anchor="middle" class="lbl" fill="#f05252">Distance X</text>
+            <!-- the remote with its two sensors -->
+            <rect x="300" y="220" width="150" height="130" rx="18" fill="#16202e" stroke="#5ac8fa" stroke-width="4"/>
+            <text x="375" y="290" text-anchor="middle" class="lbl" fill="#f0f4f8">Remote</text>
+            <text x="375" y="318" text-anchor="middle" class="small" fill="#96a4b6">UNO Q</text>
+            <rect x="349" y="203" width="52" height="32" rx="6" fill="#6eaaff" stroke="#1e2636" stroke-width="3"/>
+            <text x="375" y="227" text-anchor="middle" class="lbl" fill="#1e2636" style="font-size:20px">Y</text>
+            <rect x="283" y="259" width="32" height="52" rx="6" fill="#6eaaff" stroke="#1e2636" stroke-width="3"/>
+            <text x="299" y="292" text-anchor="middle" class="lbl" fill="#1e2636" style="font-size:20px">X</text>
+            <!-- the hand moves -->
+            <line x1="462" y1="290" x2="540" y2="290" stroke="#1e945c" stroke-width="6" marker-end="url(#ah-green)"/>
+            <line x1="375" y1="358" x2="375" y2="414" stroke="#1e945c" stroke-width="6" marker-end="url(#ah-green)"/>
+            <text x="468" y="274" class="small" fill="#1e945c">hand moves</text>
+          </svg>
+          <p class="cap">Each sensor measures one direction only, so it takes two.</p>
+        </div>
+        <div>
+          <div class="paper map">
+            <h2>The instrument follows the hand</h2>
+            <div class="map-row"><span class="mv">→</span><span>Hand right</span><i class="arrow"></i><b>X grows</b></div>
+            <div class="map-row"><span class="mv">←</span><span>Hand left</span><i class="arrow"></i><b>X shrinks</b></div>
+            <div class="map-row"><span class="mv">↓</span><span>Hand down</span><i class="arrow"></i><b>Y grows</b></div>
+            <div class="map-row"><span class="mv">↑</span><span>Hand up</span><i class="arrow"></i><b>Y shrinks</b></div>
+          </div>
+          <div class="tips">
+            <div class="panel"><h2>Only the change counts</h2><p>The tool carries on from where it stands, so the frame never has to line up with the screen.</p></div>
+            <div class="panel"><h2>Freeze key</h2><p>Hold it, bring the hand back, let go. Like lifting a mouse off the pad.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footnote">Before: a tilt sensor in the handle. Now: two Modulino Distance (laser time of flight) on a second UNO Q, which sends 50 frames a second over UDP to the game board.</div>
+    <div class="speaker-notes">How do you steer without a joystick? We started with a tilt sensor, but surgeons don't tilt, they move. Now the remote carries two laser distance sensors: one measures the distance to the side wall, one to the top wall. Move right, X grows, the instrument goes right. Only the change counts, so the frame never has to line up with the screen. Hold the freeze key to bring your hand back, like lifting a mouse. The remote is a second UNO Q.</div>
+  </section>
+
+  <!-- 6 · Two speech paths, the models on the board ......................... -->
+  <section class="slide" data-seconds="40">
+    <div class="pad">
+      <h1 class="title">Two speech paths that never cross</h1>
+      <p class="lead">Every model runs on the board. A short call goes to a tiny grammar, an order with a dose to a tool-calling model.</p>
+      <div class="lanes">
+        <div class="panel lane">
+          <div class="lane-head"><span class="lane-name">Commands</span><span class="speed"><i class="lt">&lt;</i> 0.1 s<span>end of speech to command</span></span></div>
+          <div class="flow">
+            <div class="node quote">“Clamp!”</div>
+            <i class="arrow"></i>
+            <div class="node box"><h2>Vosk small</h2><p>vocabulary: only our command phrases</p></div>
+            <i class="arrow"></i>
+            <code class="call">clamp</code>
+          </div>
+        </div>
+        <div class="panel lane">
+          <div class="lane-head"><span class="lane-name">Orders with a dose</span><span class="speed">≈ 1.9 s<span>per order, Needle</span></span></div>
+          <div class="flow">
+            <div class="node quote" style="width:280px">“Propofol 50 and oxygen to 70.”</div>
+            <i class="arrow"></i>
+            <div class="node box"><h2>Whistle</h2><p>speech to text<br>17 MB</p></div>
+            <i class="arrow"></i>
+            <div class="node box"><h2>Needle 3</h2><p>tool calling<br>12 layers · 39 MB</p></div>
+            <i class="arrow"></i>
+            <div class="outs">
+              <code class="call">give_propofol(milligrams=<b>50</b>)</code>
+              <code class="call">set_oxygen(percent=<b>70</b>)</code>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="rules">
+        <span class="chip">No drug named: no order, no model run</span>
+        <span class="chip">Invented numbers are dropped</span>
+        <span class="chip">Voices: Piper, rendered once at setup</span>
+      </div>
+    </div>
+    <div class="speaker-notes">Under the hood there are two speech paths, and every model runs on the board. Commands like "Clamp!" go to Vosk, with a vocabulary of only our command phrases: decided in under a tenth of a second. Orders with a dose need more. Cactus Whistle transcribes the sentence, and Needle, a tiny tool-calling model, turns it into function calls: give propofol, 50 milligrams; set oxygen to 70 percent. The two paths never fire each other's words, and without a drug name Needle does not even run.</div>
+  </section>
+
+  <!-- 7 · The dose .............................................................. -->
+  <section class="slide" data-seconds="25">
+    <div class="pad">
+      <h1 class="title">A keyword can't read a dose</h1>
+      <div class="strip"><img src="media/readback.png" alt="The monitor strip: BIS 64 falling, the nurse reads back: Propofol 50 milligrams."></div>
+      <div class="dose">
+        <div class="paper chart">
+          <h2>Read the monitor</h2>
+          <div class="row">BIS<b>75</b></div>
+          <div class="row">Too light by<b>30</b></div>
+          <div class="row">Dose card on the tile<b>10 mg : −6</b></div>
+          <div class="row order">Order<b>“Propofol 50.”</b></div>
+        </div>
+        <div class="outcomes">
+          <div class="panel outcome warn"><h2>Too little</h2><p class="say"><span class="who">Nurse</span><span class="q">“BIS still at 63.”</span></p><p>Give more: titrating counts as right.</p></div>
+          <div class="panel outcome good"><h2>Right amount</h2><p class="say"><span class="who">Nurse</span><span class="q">“He is stable again.”</span></p><p>Back in range.</p></div>
+          <div class="panel outcome bad"><h2>Too much</h2><p class="say"><span class="who">Nurse</span><span class="q">“He is too deep now, doctor.”</span></p><p>Overshoots into the opposite alarm.</p></div>
+          <div class="panel outcome accent"><h2>No number</h2><p class="say"><span class="who">Nurse</span><span class="q">“Standard dose.”</span></p><p>Fits about half the time.</p></div>
+        </div>
+      </div>
+    </div>
+    <div class="footnote">Three drugs, three tools: oxygen in percent, propofol in mg, adrenaline in µg. Needle also takes corrections: “Propofol 20, no wait, 30.”</div>
+    <div class="speaker-notes">Why a tool call and not keywords? Because the dose matters. Each tile shows a dose card: BIS 75 is 30 too light, 10 milligrams lower it by 6, so you order "Propofol 50". Too little and you give more, too much and he is too deep. No number gets the standard dose, which fits only half the time.</div>
+  </section>
+
+  <!-- 8 · Light enough for the UNO Q: models, RAM, numbers ................... -->
+  <section class="slide" data-seconds="35">
+    <div class="pad">
+      <h1 class="title">Light enough for the UNO Q</h1>
+      <p class="lead">On the game board (UNO Q, 3.7 GB RAM), full game running, 14 Nov 2026.</p>
+      <div class="tiles">
+        <div class="tile accent"><span class="label">RAM in use, peak</span><span class="note">while playing</span><span class="value">1.4<small>GB</small><small class="of">/ 3.7</small></span></div>
+        <div class="tile accent"><span class="label">Speech models</span><span class="note">all three, on disk</span><span class="value">127<small>MB</small></span></div>
+        <div class="tile"><span class="label">Voice command</span><span class="note">end of speech to command</span><span class="value"><small class="lt">&lt;</small> 0.1<small>s</small></span></div>
+        <div class="tile"><span class="label">Order with a dose</span><span class="note">Needle, median per order</span><span class="value">1.9<small>s</small></span></div>
+        <div class="tile"><span class="label">Orders read right</span><span class="note">drug and amount, test set</span><span class="value">40<small>/ 42</small></span></div>
+        <div class="tile"><span class="label">False orders</span><span class="note">from 14 sentences of talk</span><span class="value">0<small>/ 14</small></span></div>
+        <div class="tile"><span class="label">Fine-tuning</span><span class="note">Needle cut to 12 of 20 layers</span><span class="value">none</span></div>
+        <div class="tile"><span class="label">Audio stored or sent</span><span class="note">offline, telemetry off</span><span class="value">none</span></div>
+      </div>
+    </div>
+    <div class="footnote">Two UNO Q boards. On the game board the MCU reads knob and buttons and sends 50 frames a second over the Bridge; Linux runs game, voice, sound and the 7-inch display. Needle: the published weights, cut with the Cactus build tool to the smallest rung that passed our bar. Test sentences from one author; real speakers are next.</div>
+    <div class="speaker-notes">And it all fits on the board. While playing, the game board uses at most 1.4 of its 3.7 gigabytes of RAM; the three speech models together take under 130 megabytes. A command takes under a tenth of a second, an order with a dose about two seconds. Needle reads 40 of 42 test orders right and turns no plain talk into an order. We did not fine-tune: Needle is the published model, cut to 12 of its 20 layers. And no audio is stored or sent.</div>
+  </section>
+
+  <!-- 9 · Next + thanks ......................................................... -->
+  <section class="slide" data-seconds="15">
+    <div class="pad">
+      <h1 class="title">What's next</h1>
+      <div class="next">
+        <div class="panel"><h2>Real voices</h2><p>Test with medical students in a skills lab, with real room noise.</p></div>
+        <div class="panel"><h2>Fine-tune if needed</h2><p>Train Needle only if those tests show misses.</p></div>
+        <div class="panel"><h2>More scenarios</h2><p>A new drug is one more tool on the same monitor.</p></div>
+      </div>
+      <div class="thanks">
+        <img src="media/face-happy.png" alt="The patient, happy">
+        <div>
+          <div class="display">Thank you!</div>
+          <p class="lead">Steady hand, clear calls, the right dose. All offline.</p>
+        </div>
+      </div>
+    </div>
+    <div class="speaker-notes">Next: tests with medical students and real voices, fine-tuning only if those show misses, and more scenarios: each new drug is one more tool. Steady Hands: a steady hand, clear calls, the right dose. All offline. Thank you!</div>
+  </section>
+
+  <div id="notes"><div class="meta" id="notes-meta"></div><div class="text" id="notes-text"></div></div>
+</div>
+
+<script>
+(() => {
+  const stage = document.getElementById("stage");
+  const slides = [...document.querySelectorAll(".slide")];
+  const notesMeta = document.getElementById("notes-meta");
+  const notesText = document.getElementById("notes-text");
+  const video = document.getElementById("demo");
+  const frame = document.getElementById("video-frame");
+  let current = 0;
+  let startedAt = null; // the talk clock starts when you leave the title slide
+
+  // planned start of each slide, from data-seconds
+  const plan = [];
+  slides.reduce((t, s) => { plan.push(t); return t + Number(s.dataset.seconds || 0); }, 0);
+  const total = plan[plan.length - 1] + Number(slides[slides.length - 1].dataset.seconds || 0);
+  const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+  // footer strip on every slide except the title
+  slides.forEach((s, i) => {
+    if (s.dataset.footer === "no") return;
+    const f = document.createElement("div");
+    f.className = "footer";
+    f.innerHTML = `<img src="media/face-asleep.png" alt=""><span class="brand">Steady Hands</span>
+      <span class="team">Speech-to-Speech Hackathon · Nürnberg</span><span class="clock"></span><span class="num">${i + 1} / ${slides.length}</span>`;
+    s.appendChild(f);
+  });
+
+  function fit() {
+    const scale = Math.min(window.innerWidth / 1600, window.innerHeight / 900);
+    stage.style.setProperty("--scale", scale);
+  }
+  window.addEventListener("resize", fit);
+  fit();
+
+  // the demo video: the first file that loads wins, otherwise the placeholder stays
+  const sources = ["media/demo.mp4", "media/demo.webm", "media/demo.mov"];
+  let next = 0, videoReady = false;
+  function tryNextSource() {
+    if (next >= sources.length) { video.removeAttribute("src"); return; }
+    video.src = sources[next++];
+    video.load();
+  }
+  video.addEventListener("error", tryNextSource);
+  video.addEventListener("loadedmetadata", () => { videoReady = true; frame.classList.add("ready"); });
+  video.addEventListener("ended", () => frame.classList.add("ended"));
+  video.addEventListener("play", () => frame.classList.remove("ended", "blocked"));
+  tryNextSource();
+
+  function playVideo() {
+    if (!videoReady) return;
+    video.play().catch(() => frame.classList.add("blocked"));
+  }
+
+  function show(i) {
+    i = Math.max(0, Math.min(slides.length - 1, i));
+    const leaving = slides[current];
+    if (leaving.dataset.video && i !== current) video.pause();
+    leaving.classList.remove("active");
+    if (i > 0 && startedAt === null) startedAt = Date.now() - plan[i] * 1000;
+    current = i;
+    const s = slides[i];
+    s.classList.add("active");
+    history.replaceState(null, "", "#" + (i + 1));
+    if (s.dataset.video && videoReady) { video.currentTime = 0; frame.classList.remove("ended"); playVideo(); }
+    renderNotes();
+  }
+
+  function renderNotes() {
+    const s = slides[current];
+    const n = s.querySelector(".speaker-notes");
+    notesText.textContent = n ? n.textContent.trim() : "";
+    const from = plan[current], to = from + Number(s.dataset.seconds || 0);
+    let clock = "";
+    if (startedAt !== null) {
+      const el = (Date.now() - startedAt) / 1000;
+      const late = el - to;
+      clock = `${mmss(el)} of ${mmss(total)}`;
+      s.querySelectorAll(".clock").forEach((c) => { c.textContent = clock; c.classList.toggle("late", late > 0); });
+    } else {
+      s.querySelectorAll(".clock").forEach((c) => { c.textContent = "clock starts on slide 2"; c.classList.remove("late"); });
+    }
+    notesMeta.textContent = `Slide ${current + 1} / ${slides.length} · plan ${mmss(from)}–${mmss(to)} · ${s.dataset.seconds} s` + (clock ? ` · now ${clock}` : "");
+  }
+  setInterval(() => { if (document.body.classList.contains("notes-on")) renderNotes(); }, 500);
+
+  document.addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const onVideo = !!slides[current].dataset.video;
+    switch (e.key) {
+      case "ArrowRight": case "ArrowDown": case "PageDown": case "Enter":
+        show(current + 1); break;
+      case " ":
+        if (onVideo && videoReady) { video.paused ? playVideo() : video.pause(); } else show(current + 1);
+        break;
+      case "ArrowLeft": case "ArrowUp": case "PageUp": case "Backspace":
+        show(current - 1); break;
+      case "Home": show(0); break;
+      case "End": show(slides.length - 1); break;
+      case "n": case "N": document.body.classList.toggle("notes-on"); renderNotes(); break;
+      case "t": case "T": startedAt = Date.now() - plan[current] * 1000; renderNotes(); break;
+      case "f": case "F":
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen?.(); else document.exitFullscreen?.();
+        break;
+      default: return;
+    }
+    e.preventDefault();
+  });
+
+  stage.addEventListener("click", (e) => {
+    if (slides[current].dataset.video && videoReady) { video.paused ? playVideo() : video.pause(); return; }
+    const x = e.clientX / window.innerWidth;
+    show(x < 0.25 ? current - 1 : current + 1);
+  });
+
+  const fromHash = parseInt(location.hash.slice(1), 10);
+  slides[0].classList.add("active");
+  show(Number.isFinite(fromHash) ? fromHash - 1 : 0);
+})();
+</script>
+</body>
+</html>

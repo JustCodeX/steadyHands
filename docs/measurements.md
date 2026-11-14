@@ -137,6 +137,9 @@ JustuBoard, menu, full app: MemAvailable 1959–1966 MB; trainer process
 **C1 (at least 1 GB free): met so far** — minimum observed MemAvailable was
 1349 MB, median above 2.1 GB.
 
+Final set-up, 14 November 2026 (game board, debug panel and ASR logging off,
+playing): **at most 1.4 GB of RAM in use** of 3.7 GB, team reading during play.
+
 ## Voice findings *(increment 1 — calibration data and known failure modes)*
 
 ### Room noise floor (for EnergyVad calibration)
