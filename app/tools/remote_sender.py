@@ -15,12 +15,22 @@ import argparse
 import json
 import logging
 import socket
+import subprocess
 import time
 
 log = logging.getLogger("remote_sender")
 
 SENSOR_TOF_X = 1 << 4
 SENSOR_TOF_Y = 1 << 5
+SENSOR_TOF_CLASH = 1 << 6
+
+# Writing the firmware is also what resets the MCU, and it is the only handle
+# we have from Linux once the chip has stopped answering.
+RESET_CMD = (
+    "cd $HOME/promptpimps-unoq/firmware && "
+    "PLATFORMIO_BUILD_FLAGS=-DSH_CONTROL_MODE=2 "
+    "$HOME/.platformio/penv/bin/pio run -t nobuild -t upload --disable-auto-clean </dev/null"
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -29,6 +39,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--port", type=int, default=9876)
     p.add_argument("--router", default="unix:///var/run/arduino-router.sock")
     p.add_argument("--hz", type=float, default=50.0, help="datagrams per second")
+    p.add_argument(
+        "--watchdog-s",
+        type=float,
+        default=6.0,
+        help="reset the MCU after this long without a frame (0 disables it)",
+    )
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(asctime)s %(message)s")
@@ -36,6 +52,7 @@ def main(argv: list[str] | None = None) -> int:
     from arduino.router_bridge import Bridge
 
     latest: dict[str, int] = {"x": 0, "y": 0, "ok": 0, "b": 0}
+    seen = {"t": time.monotonic()}  # when the MCU last said anything
 
     def on_input(tilt_x, tilt_y, knob, buttons, distance_mm, distance_y_mm, sensors_ok, seq) -> None:
         # Runs on the Bridge dispatcher thread: only store, never send here.
@@ -43,6 +60,7 @@ def main(argv: list[str] | None = None) -> int:
         latest["y"] = int(distance_y_mm)
         latest["ok"] = int(sensors_ok)
         latest["b"] = int(buttons)  # the remote's own buttons: the freeze key
+        seen["t"] = time.monotonic()
 
     bridge = Bridge(args.router)
     bridge.provide("input", on_input)
@@ -55,6 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     period = 1.0 / max(1.0, args.hz)
     seq = 0
     reported = 0.0
+    revived = 0.0
     try:
         while True:
             seq += 1
@@ -66,12 +85,34 @@ def main(argv: list[str] | None = None) -> int:
             except OSError as exc:
                 log.warning("send failed: %s", exc)  # keep running; the link may come back
             now = time.monotonic()
+            # A Qwiic module plugged into a live bus can wedge a transfer, and
+            # the MCU then stops answering altogether: no frames, no monitor,
+            # no RPC. Re-flashing is what resets it; the sensors keep their
+            # addresses because they keep their power, so both are found again.
+            if args.watchdog_s and now - seen["t"] > args.watchdog_s and now - revived > 60.0:
+                revived = now
+                latest.update({"x": 0, "y": 0, "ok": 0, "b": 0})  # say "no reading" meanwhile
+                log.warning("no MCU frame for %.0f s - resetting the MCU", now - seen["t"])
+                try:
+                    subprocess.run(RESET_CMD, shell=True, timeout=120, capture_output=True)
+                    seen["t"] = time.monotonic()  # give it a fresh start
+                    log.info("MCU reset done")
+                except subprocess.SubprocessError as exc:
+                    log.error("MCU reset failed: %s", exc)
             if now - reported > 5.0:
                 reported = now
-                both = latest["ok"] & SENSOR_TOF_X and latest["ok"] & SENSOR_TOF_Y
+                ok = latest["ok"]
+                if ok & SENSOR_TOF_CLASH:
+                    state = "CLASH (both on 0x29 - unplug one, then plug it back)"
+                elif ok & SENSOR_TOF_X and ok & SENSOR_TOF_Y:
+                    state = "both"
+                elif ok & (SENSOR_TOF_X | SENSOR_TOF_Y):
+                    state = "one only (the other is not on the bus)"
+                else:
+                    state = "none"
                 log.info(
-                    "x=%4d mm  y=%4d mm  sensors=%s  sent=%d",
-                    latest["x"], latest["y"], "both" if both else "INCOMPLETE", seq,
+                    "x=%4d mm  y=%4d mm  sensors=%s  bits=0x%02X  sent=%d",
+                    latest["x"], latest["y"], state, ok, seq,
                 )
             time.sleep(period)
     except KeyboardInterrupt:

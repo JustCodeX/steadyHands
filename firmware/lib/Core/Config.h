@@ -67,6 +67,11 @@ constexpr float POS_CUTOFF_HZ = 6.0f;  // output smoothing
 constexpr uint32_t POS_STALE_MS = 800;
 // A sensor that answers but has stopped ranging gets its init redone.
 constexpr uint32_t POS_REVIVE_MS = 2500;
+// While one sensor is still missing, the bus is polled this slowly instead of
+// at SLOW_HZ. Plugging a Qwiic module into a busy bus can catch a transfer
+// mid-flight and wedge it, which stops the MCU dead; a near-idle bus leaves
+// almost no window for that.
+constexpr uint16_t POS_QUIET_HZ = 2;
 
 // --- Motion control (CONTROL_MODE 1) ---
 // The frame still carries the result in tiltX/tiltY, so the app is unchanged.
