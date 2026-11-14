@@ -351,7 +351,7 @@ class GameEngine(Service):
         if ev.reason == "no_instruction":
             # A sentence without a treatment while the nurse waits: she asks
             # again, and after two tries names what she can give.
-            if self.state is not GameState.PLAYING or not self.vitals.alarm_open():
+            if self.state is not GameState.PLAYING or not self.vitals.alarm_raised():
                 return
             self._instruction_misses += 1
             if self._instruction_misses >= self.cfg.misses_before_help:
@@ -392,7 +392,7 @@ class GameEngine(Service):
 
     def _update_vitals(self, dt: float) -> None:
         events = self.vitals.update(dt, self.time_left, blocked=self.quiz.pending is not None)
-        self._set_instruction_window(self.vitals.alarm_open())
+        self._set_instruction_window(self.vitals.alarm_raised())
         for ev in events:
             if ev.kind == "crisis":
                 self.patient.on_crisis()

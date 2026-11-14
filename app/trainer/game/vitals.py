@@ -166,6 +166,12 @@ class VitalsMonitor:
         """A value is in trouble and waits for an instruction."""
         return any(v.in_trouble for v in self.vitals.values())
 
+    def alarm_raised(self) -> bool:
+        """The nurse has announced a value that still waits for its treatment.
+        (A value can drift for a few seconds before it crosses the alarm line;
+        the player is only asked for an instruction once she said so.)"""
+        return any(key in self._alarmed and self.vitals[key].in_trouble for key in self.vitals)
+
     def troubled(self) -> list[str]:
         return [k for k, v in self.vitals.items() if v.in_trouble]
 

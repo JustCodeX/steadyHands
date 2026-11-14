@@ -35,9 +35,11 @@ def test_values_start_normal_and_the_thresholds_match_the_plan():
 def test_an_episode_drifts_raises_an_alarm_then_a_reminder_then_a_crisis():
     m = monitor(first_after_s=2.0)
     assert run(m, 1.9) == [] and m.episode == ""
+    run(m, 0.5)
+    assert m.alarm_open() and not m.alarm_raised()  # drifting, but the nurse has not said it yet
     events = run(m, 12.0)
     assert m.episode == "spo2" and m.vitals["spo2"].trend == -1
-    assert kinds(events) == ["alarm"]
+    assert kinds(events) == ["alarm"] and m.alarm_raised()
     assert events[0].vital == "spo2" and 90 <= events[0].value <= 92
     events = run(m, 6.0)
     assert kinds(events) == ["reminder"]  # once, with the value

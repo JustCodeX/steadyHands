@@ -211,9 +211,17 @@ def test_engine_opens_the_window_and_the_nurse_asks_again_then_names_the_options
     bus.publish(MisheardEvent(reason="no_instruction"))
     bus.dispatch()
     assert not [e for e in seen if isinstance(e, GameEvent) and e.kind == "pardon_doctor"]  # no alarm yet
-    for _ in range(30):
+    for _ in range(20):
         eng.tick(0.1)
     bus.dispatch()
+    assert eng.vitals.alarm_open() and not [e for e in seen if isinstance(e, InstructionWindow)]  # drifting, not announced
+    bus.publish(MisheardEvent(reason="no_instruction"))
+    bus.dispatch()
+    assert not [e for e in seen if isinstance(e, GameEvent) and e.kind == "pardon_doctor"]
+    for _ in range(140):
+        eng.tick(0.1)
+    bus.dispatch()
+    assert any(isinstance(e, GameEvent) and e.kind == "vital_alarm" for e in seen)
     assert [e.open for e in seen if isinstance(e, InstructionWindow)] == [True]
     for _ in range(2):
         bus.publish(MisheardEvent(reason="no_instruction"))
