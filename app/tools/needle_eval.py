@@ -61,10 +61,16 @@ def run(weights: Path, cfg, cases: dict, bank: QuestionBank | None, trigger_gate
         said, expected = case["said"], case["expected"]
         t = time.perf_counter()
         match = interpreter.interpret(said)
-        times.append(time.perf_counter() - t)
+        elapsed = time.perf_counter() - t
+        times.append(elapsed)
         got = match.word if match else None
-        rows.append({"kind": case["kind"], "said": said, "expected": expected, "got": got, "ok": got == expected, "trigger_word": has_trigger_word(said)})
+        ran = not trigger_gate or has_trigger_word(said)  # the gate lets it through: the model ran
+        rows.append({"kind": case["kind"], "said": said, "expected": expected, "got": got, "ok": got == expected,
+                     "trigger_word": has_trigger_word(said), "model_ms": 1000 * elapsed if ran else None})
     peak_ram_mb = interpreter._agent.peak_ram_mb
+    model_ms = [r["model_ms"] for r in rows if r.get("model_ms") is not None]
+    first_call_ms = model_ms[0] if model_ms else 0.0  # includes the engine's warm-up
+    model_ms = sorted(model_ms[1:])
     interpreter.unload()
 
     if bank is not None:
@@ -101,6 +107,10 @@ def run(weights: Path, cfg, cases: dict, bank: QuestionBank | None, trigger_gate
         "per_word": {w: f"{ok}/{n}" for w, (ok, n) in sorted(per_word.items())},
         "answers": f"{sum(r['ok'] for r in rows if r['kind'] == 'answer')}/{sum(r['kind'] == 'answer' for r in rows)}" if bank else None,
         "median_ms": round(1000 * _median(times)),
+        "model_calls": len(model_ms) + (1 if first_call_ms else 0),
+        "model_median_ms": round(_median(model_ms)) if model_ms else 0,
+        "model_worst_ms": round(model_ms[-1]) if model_ms else 0,
+        "first_call_ms": round(first_call_ms),
         "worst_ms": round(1000 * times[-1]) if times else 0,
         "load_s": round(load_s, 2),
         "peak_ram_mb": round(peak_ram_mb, 1),
@@ -117,9 +127,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--quiz", action="store_true", help="also judge the quiz answers (one model per question)")
     p.add_argument("--json", action="store_true")
     p.add_argument("--quiet", action="store_true", help="no list of failed cases")
+    p.add_argument("--threads", type=int, default=None, help="engine threads (cactus.set_threads); default: the runtime's choice")
     p.add_argument("--no-trigger-gate", action="store_true", help="let every sentence reach the model, as without voice.needle_require_trigger")
     args = p.parse_args(argv)
     cfg = load(args.config)
+    if args.threads is not None:
+        from trainer.cactus_models.runtime import load_cactus
+
+        load_cactus().set_threads(args.threads)
     cases = load_cases(args.cases)
     bank = QuestionBank.load(cfg.quiz.questions_file) if args.quiz else None
     results = [run(w, cfg, cases, bank, trigger_gate=not args.no_trigger_gate) for w in args.weights]
@@ -131,7 +146,8 @@ def main(argv: list[str] | None = None) -> int:
                 f"{r['weights']}{'' if r['trigger_gate'] else ' (no trigger gate)'}: {'PASS' if r['passed'] else 'fail'}  tools {r['tool_hits']}/{r['tool_cases']} ({100 * r['hit_rate']:.0f} %), "
                 f"false triggers {r['false_triggers']}/{r['talk_cases']} {r['false_triggers_by_kind']}, without trigger word {r['hits_without_trigger_word']}"
                 + (f", quiz {r['answers']}" if r["answers"] else "")
-                + f" | median {r['median_ms']} ms, worst {r['worst_ms']} ms, load {r['load_s']} s, peak {r['peak_ram_mb']} MB"
+                + f" | model call median {r['model_median_ms']} ms, worst {r['model_worst_ms']} ms ({r['model_calls']} calls, first {r['first_call_ms']} ms), "
+                f"all cases median {r['median_ms']} ms, load {r['load_s']} s, peak {r['peak_ram_mb']} MB"
             )
             print("   " + "  ".join(f"{w} {v}" for w, v in r["per_word"].items()))
             if not args.quiet:

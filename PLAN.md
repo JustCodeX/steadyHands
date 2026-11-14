@@ -47,7 +47,7 @@ A working prototype of a surgeon trainer: you guide a surgical instrument throug
 
 ### One-player mode
 
-The surgeon holds the **instrument**, a handle containing the Modulino Movement, and tilts it to steer the tool tip through the corridors of the patient map. The surgeon wears the headset and calls for tools. Touching a wall plays a buzz in the game, makes the patient react ("Ouch!"), and raises the patient's heart rate. After three touches, the patient wakes up and the round is lost. Removing every item before time runs out wins. A round lasts about 60 seconds, so a trainee gets feedback within the first minute.
+The surgeon holds the **instrument**, a handle containing the Modulino Movement, and tilts it to steer the tool tip through the corridors of the patient map. The surgeon wears the headset and calls for tools. Touching a wall plays a buzz in the game, makes the patient react ("Ouch!"), and raises the patient's heart rate. After three touches, the patient wakes up and the round is lost. Removing every item before time runs out wins. A round lasts about 60 seconds, so a trainee gets feedback within the first minute. From level 2 on, a **vitals monitor** runs alongside: when a value goes wrong, the surgeon tells the nurse what to give, without taking the hands off the instrument ([below](#vitals-monitor-and-the-nurse)).
 
 ### Co-op mode (two players)
 
@@ -64,7 +64,8 @@ The surgeon holds the **instrument**, a handle containing the Modulino Movement,
 | Modulino Knob | Menu: picks the level · Round: turn picks the instrument (co-op: the assistant's choice), press switches on the light in dark zones · Paused: steering sensitivity |
 | Modulino Buttons A / B / C | A: start, use the instrument · B: pause/continue · C: next instrument in a round (co-op: hand over the chosen instrument); in the menu, switch between one-player and co-op |
 | Modulino Distance (optional, stretch) | Hand height sets depth: lower your hand to grab, raise it to travel |
-| Voice | Tool and room commands (see below) |
+| Voice | Tool and room commands, and the nurse's treatments (see below) |
+| Keyboard (development) | Arrows tilt, 1–4 instruments, 5–7 treatments, letters for the other commands |
 
 ### Voice commands
 
@@ -82,6 +83,9 @@ We picked words that sound different from each other. Every recognised command i
 | `repeat` | The patient repeats their last line |
 | `help` | The patient lists the commands that work right now |
 | `pause` · `continue` · `new game` | Game flow |
+| `oxygen` · `anaesthesia` · `adrenaline` | The nurse's treatments on the vitals monitor. With `cactus.toml` also in free sentences ("he can't breathe", "his pressure is dropping") |
+
+The commands above the last row stay on the Vosk grammar. The treatments go through Whistle and Needle when they are switched on; the two paths never fire each other's words ([speech pipeline](#speech-pipeline)).
 
 ### Levels
 
@@ -89,9 +93,28 @@ Each level is a PNG mask with a small JSON file:
 - the mask has black walls, white corridors, and coloured item spots,
 - the JSON holds the start point, the items, and the tool each item needs.
 
-Collision detection is a pixel lookup in the mask, so anyone on the team can draw levels. Six levels ship; they get narrower and shorter, and the patient asks more questions.
+Collision detection is a pixel lookup in the mask, so anyone on the team can draw levels. Six levels ship; they get narrower, and the vitals monitor goes wrong more often.
 
-### Questions during the round
+### Vitals monitor and the nurse
+
+A console along the bottom edge shows three values: oxygen saturation (SpO2), depth of anaesthesia (BIS) and systolic blood pressure. At random times one of them starts to drift.
+
+| Value | Normal | Alarm | Critical | Right instruction |
+| --- | --- | --- | --- | --- |
+| SpO2 (%) | 98 | below 92 | below 86 | `oxygen` |
+| BIS | 45 | above 62 | above 75 | `anaesthesia` (deeper) |
+| Blood pressure, systolic (mmHg) | 120 | below 90 | below 75 | `adrenaline` |
+
+- **Alarm:** the tile turns yellow and the nurse says it ("Doctor, sats are dropping."). After 6 s without the right instruction she repeats it with the value. A value that stays critical for 4 s costs a life, like a wall contact (counted apart as a crisis); the team steps in and the episode ends.
+- **The instruction** is spoken to the nurse, by name ("Oxygen!") or in a sentence ("he can't breathe, do something"), or given with keys 5, 6, 7. She reads it back ("More oxygen."), as in the operating room.
+- **Every treatment acts on all three values** (`app/trainer/game/vitals.py`): deeper anaesthesia lowers the blood pressure, adrenaline makes the patient lighter and the pulse jump. The right one stops the drift and the value recovers in about 3 s ("He is stable again."). A wrong one only brings its side effects, the drifting value jumps worse, and she says "That did not help, doctor." One with no alarm open is "not needed" and counts as wrong too.
+- One episode at a time; none in the last 15 s of a round. Level 1 has none; from level 2 on, one to three (`vitals` in `level.json`).
+- Medically simplified on purpose: adrenaline stands in for whatever vasopressor an anaesthetist would choose, and the numbers are rounded.
+- The nurse's last line is shown as a subtitle next to the monitor: headset audio reaches only the wearer (D4).
+
+The vitals monitor replaced the quiz in the levels. The quiz below stays in the code and in the level files and is off by default (`quiz.enabled`); a question and an alarm are never open at the same time.
+
+### Questions during the round (off by default)
 
 While the surgeon steers, the patient asks a question ("A vessel is bleeding. Which instrument stops it?"). The question is also shown on screen with the time left to answer.
 
@@ -115,7 +138,9 @@ After each round, the screen shows:
 | Steadiness | Jitter in the filtered tilt signal while moving through corridors |
 | Instrument calls | Correct calls, and calls for the wrong instrument for the task |
 | Precision help | How often `steady` was used |
-| Questions | How many of the patient's questions were answered correctly |
+| Instructions to the nurse | Right ones out of all given (wrong and unneeded ones count against) |
+| Crises | How often a vital sign stayed critical and the team had to step in |
+| Questions | How many of the patient's questions were answered correctly (only with the quiz on) |
 
 Levels get harder step by step, with narrower corridors and less time. Results are kept as numbers for the current session only. No audio and no personal data are stored.
 
@@ -421,17 +446,18 @@ The events on the bus are the interface tables above, written as classes: `Input
 1. **Mic:** headset, 16 kHz mono, read only while a round runs.
 2. **Signal processing:** a high-pass filter (removes rumble below about 100 Hz) and level normalisation, so that quiet and loud speakers are handled the same way.
 3. **Gate:** voice activity detection (Silero VAD or WebRTC VAD). Speech-to-text runs only on detected speech segments.
-4. **Speech-to-text (❓ D2, Timon):** the default in the code is `VoskRecognizer` (Vosk small English with its vocabulary restricted to our command phrases). Restricting the vocabulary makes recognition more robust, and the model is small. Alternatives (Whistle, Whisper tiny) are further `SpeechRecognizer` subclasses, selected with `voice.recognizer` in the config. Whatever is chosen gets measured in M0 on 20 spoken commands with real hall noise.
-5. **Spoken answers:** while a quiz question is open, speech is an answer and not a command. Two more recognisers hear it together (`voice.answer_vocabulary = "both"`): one with the open vocabulary, which follows whole sentences but mishears rare words ("clamp" becomes "plan"), and one restricted to the open question's answer phrases, which knows the words but loses them inside a sentence. What both heard is joined. They use the same loaded Vosk model, so they add no second model to memory or disk, and they run only during the answer window. An `AnswerEvaluator` then maps the text to one of the question's options; the default looks for the options' phrases, and a tool-calling model can replace it ([docs/needle-integration.md](docs/needle-integration.md)). An answer that names no option, or two, is unclear and is asked for again, which is also what happens when the two recognisers contradict each other.
-6. **Response:** every recognised command appears on screen. Target: under 1 s from the end of a word to the tool change (to be measured).
-7. **Text-to-speech:** Piper with an English voice. We render all patient lines to WAV once at setup, so the game only plays files and there is no speech synthesis during play.
-8. **Privacy and security:**
+4. **Speech-to-text for commands (❓ D2, Timon):** the default in the code is `VoskRecognizer` (Vosk small English with its vocabulary restricted to our command phrases). Restricting the vocabulary makes recognition more robust, and the model is small. Alternatives (Whistle, Whisper tiny) are further `SpeechRecognizer` subclasses, selected with `voice.recognizer` in the config. Whatever is chosen gets measured in M0 on 20 spoken commands with real hall noise.
+5. **Sentences for the nurse (optional, `cactus.toml`):** both recognisers hear every segment (`CommandUnderstanding`). A short call with a command phrase is decided by the Vosk grammar at once. A longer segment, or one the grammar did not catch, is transcribed by Whistle; if it names a treatment, or (only while an alarm is open, and only with a symptom word in it) Needle maps it to one, the treatment wins; otherwise the grammar's result stands. Without Whistle the treatment names join the grammar, so the minimum version needs no model. Details and measurements: [docs/needle-integration.md](docs/needle-integration.md).
+6. **Spoken answers (quiz, off by default):** while a quiz question is open, speech is an answer and not a command. Two more recognisers hear it together (`voice.answer_vocabulary = "both"`): one with the open vocabulary, which follows whole sentences but mishears rare words ("clamp" becomes "plan"), and one restricted to the open question's answer phrases, which knows the words but loses them inside a sentence. What both heard is joined. They use the same loaded Vosk model, so they add no second model to memory or disk, and they run only during the answer window. An `AnswerEvaluator` then maps the text to one of the question's options; the default looks for the options' phrases, and a tool-calling model can replace it ([docs/needle-integration.md](docs/needle-integration.md)). An answer that names no option, or two, is unclear and is asked for again, which is also what happens when the two recognisers contradict each other.
+7. **Response:** every recognised command appears on screen. Target: under 1 s from the end of a word to the tool change (to be measured).
+8. **Text-to-speech:** Piper with an English voice. We render all patient lines to WAV once at setup, so the game only plays files and there is no speech synthesis during play.
+9. **Privacy and security:**
    - Audio exists only in memory. It is never written to disk and never sent anywhere.
    - Transcripts are not logged either. The log contains only the recognised command word and its timing. A spoken quiz answer leaves the voice service only as a verdict (right, wrong, or unclear).
    - During play, the trainer needs no network and exposes no network services. In demo mode, Wi-Fi is switched off where possible, which also saves energy.
    - Training scores are kept for the current session only.
 
-No LLM in the default configuration: the patient's lines are scripted. This saves the most energy and keeps response times short. Two small models from Cactus can be switched on with `app/cactus.toml` ([docs/needle-integration.md](docs/needle-integration.md)): Needle, which can only choose one of our tool calls and judges quiz answers that name no option in so many words, and Whistle as the recogniser for whole sentences. Their runtime's telemetry and hub access are switched off in the code.
+No LLM in the default configuration: the patient's and the nurse's lines are scripted. This saves the most energy and keeps response times short. Two small models from Cactus can be switched on with `app/cactus.toml` ([docs/needle-integration.md](docs/needle-integration.md)), for the nurse's treatments only: Whistle hears the sentence, and Needle, which can only choose one of three tool calls, maps it to a treatment. Their runtime's telemetry and hub access are switched off in the code. Measured 14 Nov 2026 on the board with synthetic voices: 32 of 32 cases right, 790 ms median from the end of speech; the published Needle rungs alone are not reliable enough, which the trigger-word gate and the alarm-only rule cover.
 
 ### Speech interaction
 
@@ -448,9 +474,14 @@ No LLM in the default configuration: the patient's lines are scripted. This save
 
 **Misheard speech:**
 - A match below the confidence threshold triggers nothing. The screen shows "?" and the patient asks "Pardon?".
+- While the nurse waits for an instruction (an alarm is open), a sentence without a treatment gets "Pardon, doctor?"; the second time she names what she can give. Outside an alarm such a sentence is ignored, so talk never disturbs the game.
 - After two misses in a row, the patient lists the commands that fit the current situation, as with `help`.
 - Speech that doesn't resemble any command is ignored silently. This matters most in co-op, where the players talk to each other all the time and the game must not interrupt them.
 - `cancel` undoes a wrongly recognised tool change.
+
+**One open turn at a time.** A quiz question and an alarm are never open together, so the microphone always listens for one thing. The microphone is off while a line plays; alarm lines are short and interrupt other lines.
+
+**End of a segment.** A call ends after 400 ms of silence. Once a segment is longer than 1.2 s it counts as a sentence: then 700 ms of silence end it and it may run 6 s, so a pause to think does not cut it.
 
 **Response time.** The README asks for a reply within 3–5 s. Our target is stricter: under 1 s for commands, and patient lines start without delay because they are pre-rendered. We measure both in M0.
 
@@ -461,8 +492,9 @@ The 4 GB RAM is shared by Debian, the desktop, the game, and speech. We measure 
 | Part | Expected memory | Source |
 | --- | --- | --- |
 | Debian + desktop | Measure | |
-| Speech-to-text: Whistle (optional) | 17 MB model file; 73 MB at runtime measured on another UNO Q; measure in this app | Team hand-over, 13 Nov |
-| Needle 3, 9-layer rung (optional) | 28 MB model file; 90 MB at runtime measured on another UNO Q; measure in this app | Team hand-over, 13 Nov |
+| Speech-to-text: Whistle (optional) | 17 MB model file; with Needle, the trainer process grows from 327 to 364–373 MB RSS | Board, 14 Nov ([measurements](docs/measurements.md)) |
+| Needle 3, 9-layer rung (optional) | 28 MB model file; its own worker process, 89 MB RSS (90 MB peak reported by the engine) | Board, 14 Nov |
+| Full app with both, menu | MemAvailable 1959–1966 MB of 3667 MB | Board, 14 Nov |
 | Speech-to-text: Vosk small | Around 300 MB | Hackathon README, model catalogue |
 | Piper | Runs only at setup, to pre-render the patient lines; not loaded during play | |
 | VAD | Small; measure | |
@@ -546,7 +578,7 @@ Event end: 14 November, 12:00. The exact build cutoff is not published; ask the 
 | Time | What happens | Shows criteria |
 | --- | --- | --- |
 | 0:00–0:15 | The problem: operating-room trainees need steady hands and clear instrument calls. We built an offline trainer on the UNO Q. | U1, U4 |
-| 0:15–1:15 | One live round: tilt the instrument; call "forceps"; touch a wall (buzz, "Ouch!"); say something unclear (the patient asks "Pardon?"); say `cancel`; remove the item. The voice states are visible throughout. | U2, P1, P3–P6 |
+| 0:15–1:15 | One live round (level 2 or 3): tilt the instrument; call "forceps"; touch a wall (buzz, "Ouch!"); an alarm comes ("Doctor, sats are dropping."): answer in a sentence without letting go ("he can't breathe, give him something"), the nurse reads back "More oxygen." and the tile turns green; say `cancel`; remove the item. The voice states and the nurse's subtitle are visible throughout. | U2, P1, P3–P6 |
 | 1:15–1:35 | Feedback screen plus the spoken result | U3, P1, P2 |
 | 1:35–1:50 | Measured values: energy per round, latency, RAM. Wi-Fi is off, and nothing leaves the board. | C1–C4, P6–P8 |
 | 1:50–2:00 | Co-op call-back in one sentence; the build is open source | C5 |
@@ -577,9 +609,9 @@ Sources: the event constraints and our proposed team requirements from the hacka
 | E2 | Working prototype and live demo after 24 hours | Milestones M0–M3, [demo script](#demo-script-2-minutes) | Demo run at the event | ⬜ |
 | E3 | Team of four | Four work areas, which can be merged if fewer people work on them | [Work split](#work-split) assigned | ⬜ |
 | E4 | Uses the event's topics | Signal processing (high-pass filter, VAD), speech-to-text, speech output | Pipeline runs on the board | 🟡 |
-| C1 | Runs on the UNO Q within 4 GB RAM | [Memory budget](#memory-budget) with at least 1 GB free | `free -m` per state | ⬜ |
+| C1 | Runs on the UNO Q within 4 GB RAM | [Memory budget](#memory-budget) with at least 1 GB free | `free -m` per state. So far: idle 2231 MB, menu 2139 MB available (13 Nov); with Whistle + Needle 1959–1966 MB in the menu (14 Nov). Round states still to measure | 🟡 |
 | C2 | Voice captured, processed, and synthesised locally; no audio leaves the device or is stored | Audio only in memory; no cloud; no network during play | No audio files on disk after a session; demo with Wi-Fi off | ⬜ |
-| C3 | Energy-aware: measure and minimise | VAD gating, pre-rendered speech, idle mode, no LLM ([Energy](#energy-and-environment)) | Power per state, energy per round, and the saving from VAD, all measured | ⬜ |
+| C3 | Energy-aware: measure and minimise | VAD gating, pre-rendered speech, idle mode, no LLM ([Energy](#energy-and-environment)); Whistle runs only for sentences, never for short calls, and Needle only during an alarm with a symptom word | Power per state, energy per round, and the saving from VAD, all measured | ⬜ |
 | C4 | Secure processing and ownership of voice data | No transcripts in logs; no network services; scores for the session only | Log contains only command words and timings | ⬜ |
 | C5 | Open source, published back to the community | `LICENSE`, build guide, public repo or public copy ([Publishing](#publishing)) | Public link (D6) | ⬜ |
 
@@ -596,12 +628,12 @@ Sources: the event constraints and our proposed team requirements from the hacka
 
 | ID | Requirement | How we meet it | Evidence for ✅ | Status |
 | --- | --- | --- | --- | --- |
-| P1 | Spoken input with a meaningful spoken response | Patient reactions, `help`, spoken round result | Demo round | 🟡 |
+| P1 | Spoken input with a meaningful spoken response | Patient reactions, `help`, spoken round result; the nurse reads back each instruction and says what it did | Demo round | 🟡 |
 | P2 | One end-to-end task, done reliably | One-player round from start to feedback | 10 runs in a row without a restart | ⬜ |
 | P3 | Help, repeat, cancel | [Voice commands](#voice-commands) `help`, `repeat`, `cancel` | Each tested 5 times | 🟡 |
 | P4 | Listening, processing, and speaking states visible | Microphone icon on screen, on-board RGB LED 4 ([Speech interaction](#speech-interaction)) | Every state seen in a demo round | 🟡 |
-| P5 | Graceful recovery from misheard speech | Confidence threshold, "Pardon?", hint with fitting commands, `cancel`, button fallback; an unclear quiz answer is asked for again | Test with wrong and unclear words, and with unclear answers | 🟡 |
-| P6 | Response within 3–5 s after speech ends | Target under 1 s; pre-rendered replies | Median and worst value over 20 tries | ⬜ |
+| P5 | Graceful recovery from misheard speech | Confidence threshold, "Pardon?", hint with fitting commands, `cancel`, button fallback; "Pardon, doctor?" only while an alarm waits, then the nurse names the treatments; talk outside an alarm is ignored | Test with wrong and unclear words and sentences ([tests.md](docs/tests.md#vitals-monitor-and-the-nurse)) | 🟡 |
+| P6 | Response within 3–5 s after speech ends | Target under 1 s; pre-rendered replies | Median and worst value over 20 tries. So far on the board with synthetic voices (14 Nov): calls 87 ms median, free sentences through Whistle + Needle 790 ms median, 1860 ms worst (32 cases). People still to measure | 🟡 |
 | P7 | Local within 4 GB RAM; no stored audio; no cloud | Covered by C1 and C2 | Evidence from C1 and C2 | ⬜ |
 | P8 | Available peripherals and open-source components; latency and energy measured | Modulinos, headset, display; open models; measurement plan | Measured values in the README | ⬜ |
 
@@ -611,7 +643,7 @@ Sources: the event constraints and our proposed team requirements from the hacka
 | --- | --- | --- | --- | --- |
 | T1 | Feasible for four people in 24 hours, in parallel areas with clear interfaces | [Work split](#work-split) and [interface tables](#interfaces-agree-on-these-first-so-we-can-work-in-parallel) | Interfaces agreed at M0 | ⬜ |
 | T2 | Value and a clear success visible in two minutes | [Demo script](#demo-script-2-minutes) | Rehearsed run under 2:00 | ⬜ |
-| T3 | Minimum version without an unrestricted LLM | The default configuration uses no language model; patient lines are scripted. Optional: Needle, which can only choose one of our tool calls | The app runs every feature with `cactus-compute` not installed | 🟡 |
+| T3 | Minimum version without an unrestricted LLM | The default configuration uses no language model; patient and nurse lines are scripted; the vitals monitor works with the treatment names and keys 5–7. Optional: Needle, which can only choose one of three tool calls | The app runs every feature with `cactus-compute` not installed. So far: the default config never imports it; 18/32 synthetic cases without a model, all of them commands and named treatments (14 Nov) | 🟡 |
 | T4 | Optional features only after the core works | Core-first rule in the [milestones](#milestones) | Optional work starts only after M1 | ⬜ |
 | T5 | First milestone: spoken input gives a local spoken response on the board; then measure latency | M0 | Test log with latency | ⬜ |
 

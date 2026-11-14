@@ -77,6 +77,22 @@ day (microphone → STT → matcher → pre-rendered clip, model loaded once at
 start). P6 requires 3–5 s, so even the worst case has ~4× headroom. Treat this
 as the bound to beat; measure this stack's own numbers with 20 spoken commands.
 
+### Vitals monitor: the voice path with Whistle and Needle *(synthetic voices)*
+
+Measured 14 November 2026 with `app/tools/voice_drive.py`: 32 cases (16
+sentences, macOS voices Samantha and Daniel) played into the app's
+`VoiceService` without a microphone. End of speech = the segmenter closed
+the segment. Details and the rung comparison: [needle-integration.md](needle-integration.md#measurements).
+
+| Setup | Right | Median (ms) | Worst (ms) |
+| --- | --- | --- | --- |
+| Board (JustuBoard, `schedutil`, game running), `cactus.toml` (Whistle + Needle 9L) | 32/32 | 790 | 1860 |
+| Board, defaults (no model) | 18/32 | 87 | 104 |
+| Laptop (Intel i9), `cactus.toml` | 32/32 | 93 | 235 |
+
+Needle 9L alone on the board: 1033 ms median, 1313 ms worst per model call
+(41 calls), 90 MB peak, 1.95 s to load.
+
 ## Memory and CPU (from `free -m` and metrics.csv)
 
 Measured 13 November 2026, full app running (Vosk + pygame renderer + 219
@@ -89,6 +105,11 @@ clips), median over the session; n = 195 (idle) / 23 (menu) samples.
 | Round, nobody speaking | | | |
 | Round, speaking | | | |
 | Round, answering a quiz question (open-vocabulary recogniser) | | | |
+
+With the Cactus models (`cactus.toml`), measured 14 November 2026 on
+JustuBoard, menu, full app: MemAvailable 1959–1966 MB; trainer process
+364–373 MB RSS (327 MB without the models, same boot); Needle worker process
+89 MB RSS.
 
 **C1 (at least 1 GB free): met so far** — minimum observed MemAvailable was
 1349 MB, median above 2.1 GB.

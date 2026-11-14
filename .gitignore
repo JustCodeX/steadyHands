@@ -21,3 +21,6 @@ __pycache__/
 app/assets/clips/*.wav
 app/logs/*.csv
 .pytest_cache/
+
+# Hand-over notes can hold board passwords
+handoff-*.md

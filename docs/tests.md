@@ -50,6 +50,30 @@ With `voice.answer_vocabulary = "both"` (the default). Run with `--config debug-
 | an instrument word as the answer | counts as the answer; the instrument in hand does not change | |
 | 20 plain commands afterwards | recognised as well as before the quiz was added | |
 
+## Vitals monitor and the nurse
+
+With `--config cactus.toml` (Whistle + Needle 9L) unless noted. Synthetic-voice
+run for comparison: [needle-integration.md](needle-integration.md#measurements).
+
+| Case | Expected reaction | Observed |
+| --- | --- | --- |
+| a value drifts, nothing said | alarm line and blinking tile; after 6 s the nurse repeats it with the value; critical for 4 s: "critical", one life lost | |
+| right treatment by name ("Oxygen!") | read-back ("More oxygen."), value recovers in about 3 s, "stable again" | |
+| right treatment in other words ("he can't breathe") | as above, after about a second | |
+| wrong treatment | read-back, "That did not help", its side effect on the monitor, the value jumps worse | |
+| treatment with no alarm open | read-back, "That was not needed", counted as wrong | |
+| sentence without a treatment during an alarm | "Pardon, doctor?"; the second time she names oxygen, anaesthesia, adrenaline | |
+| talk with no alarm open ("his sats look good now") | nothing | |
+| plain commands during an alarm ("Clamp!") | the instrument changes; no treatment | |
+| keys 5, 6, 7 | the three treatments | |
+| without `cactus.toml` | treatments by name through the grammar; free sentences do nothing | |
+
+| Spoken instructions on the board (20, people) | Tries | Right | Wrong treatment | Nothing / "Pardon?" | Median latency (ms) |
+| --- | --- | --- | --- | --- | --- |
+| by name | | | | | |
+| in other words | | | | | |
+| 20 plain commands as a cross-check | | | | | |
+
 ## Co-op hand-over
 
 | Case | Expected reaction | Observed |
@@ -61,15 +85,16 @@ With `voice.answer_vocabulary = "both"` (the default). Run with `--config debug-
 
 ## Needle on the board (`app/tools/needle_eval.py`)
 
-| Rung | Passed | Median (ms) | Worst (ms) | Memory added (MB) | Failed cases |
-| --- | --- | --- | --- | --- | --- |
-| 9L | | | | | |
-| 12L | | | | | |
-| 19L | | | | | |
+Treatments only (45 sentences), false triggers out of 51; trigger gate on.
+14 November 2026, JustuBoard, `schedutil`, game running.
 
-| Case, with `--config cactus.toml` | Expected reaction | Observed |
+| Rung | Treatments right | False triggers (talk / status / older commands) | Model call median (ms) | Worst (ms) | Peak memory (MB) |
+| --- | --- | --- | --- | --- | --- |
+| 4L | 28 | 0 / 10 / 0 | 693 | 6490 | 61 |
+| 6L | 26 | 0 / 10 / 0 | 699 | 8969 | 67 |
+| 9L | 29 | 0 / 11 / 0 | 1033 | 1313 | 90 |
+| 12L | 29 | 0 / 11 / 0 | 1242 | 1692 | 114 |
+
+| Case | Expected reaction | Observed |
 | --- | --- | --- |
-| answer that names the option ("the clamp") | verdict at once; the model is not asked | |
-| answer in other words ("the thing you cut with") | right verdict after about a second | |
-| answer that fits no option ("I have no idea") | "Pardon?" | |
-| `cactus-compute` not installed, or a model file missing | one log line; the game runs with the keyword evaluator | |
+| `cactus-compute` not installed, or a model file missing | one log line; treatments by name through the Vosk grammar | |

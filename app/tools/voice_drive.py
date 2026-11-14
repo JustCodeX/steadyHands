@@ -8,6 +8,8 @@ file chooses the engines exactly as in the game:
 
     python tools/voice_drive.py --config cactus.toml           # Whistle + Needle
     python tools/voice_drive.py                                  # defaults (no model)
+    python tools/voice_drive.py --save-wavs clips/                # only render the voices (on a Mac)
+    python tools/voice_drive.py --wav-dir clips/ --config cactus.toml   # on the board, without `say`
 
 Numbers from here are "laptop, synthetic voices": they show the pipeline
 works, not how it does with real speakers on the board.
@@ -92,10 +94,18 @@ class PlayedAudio:
         return None
 
 
-def say(text: str, voice: str, folder: Path) -> np.ndarray:
-    path = folder / f"{abs(hash((text, voice)))}.wav"
+def clip_name(voice: str, index: int) -> str:
+    return f"{voice}_{index:02d}.wav"
+
+
+def say(text: str, voice: str, path: Path) -> None:
     subprocess.run(["say", "-v", voice, "-o", str(path), "--data-format=LEI16@16000", text], check=True)
+
+
+def read_wav(path: Path) -> np.ndarray:
     with wave.open(str(path)) as w:
+        if w.getframerate() != 16000 or w.getnchannels() != 1 or w.getsampwidth() != 2:
+            raise ValueError(f"{path} is not 16 kHz mono 16-bit")
         return np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
 
 
@@ -103,10 +113,19 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--config", help="TOML file with overrides (cactus.toml for Whistle + Needle)")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--wav-dir", type=Path, help="read the clips from here instead of synthesising them")
+    p.add_argument("--save-wavs", type=Path, help="only render the clips into this folder, then stop")
     args = p.parse_args(argv)
-    if shutil.which("say") is None:
-        print("needs macOS `say` for the synthetic voices", file=sys.stderr)
+    if args.wav_dir is None and shutil.which("say") is None:
+        print("needs macOS `say` for the synthetic voices, or --wav-dir with clips rendered elsewhere", file=sys.stderr)
         return 2
+    if args.save_wavs is not None:
+        args.save_wavs.mkdir(parents=True, exist_ok=True)
+        for voice in VOICES:
+            for i, (text, _, _) in enumerate(CASES):
+                say(text, voice, args.save_wavs / clip_name(voice, i))
+        print(f"rendered {len(VOICES) * len(CASES)} clips into {args.save_wavs}")
+        return 0
     cfg = load(args.config)
     bus = EventBus()
     started = time.perf_counter()
@@ -140,8 +159,12 @@ def main(argv: list[str] | None = None) -> int:
     try:
         with tempfile.TemporaryDirectory() as tmp:
             for voice in VOICES:
-                for text, alarm, expected in CASES:
-                    samples = say(text, voice, Path(tmp))
+                for i, (text, alarm, expected) in enumerate(CASES):
+                    if args.wav_dir is not None:
+                        samples = read_wav(args.wav_dir / clip_name(voice, i))
+                    else:
+                        say(text, voice, Path(tmp) / clip_name(voice, i))
+                        samples = read_wav(Path(tmp) / clip_name(voice, i))
                     bus.publish(InstructionWindow(open=alarm))
                     bus.dispatch()
                     seen.clear()

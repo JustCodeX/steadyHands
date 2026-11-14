@@ -1,112 +1,135 @@
-# Needle and Whistle (Cactus) in the voice pipeline
+# Whistle and Needle (Cactus) for the nurse's treatments
 
-Two optional models from Cactus Compute can be switched on: **Needle**, a tool-calling model, and **Whistle**, a small speech-to-text model. This page says what each one does here, how to switch it on, what has been checked, and what still has to be measured on the board.
+Two optional models from Cactus Compute serve one mechanic: the **vitals monitor**. When a value drifts, the surgeon tells the nurse what to give, in a free sentence ("he can't breathe, do something"). **Whistle** (speech-to-text) hears the sentence, **Needle** (tool calling) turns it into one of three treatments: `oxygen`, `anaesthesia`, `adrenaline`.
 
-⚠ **The code was written against the runtime's API as described in the team's hand-over notes, and tested against a stand-in for the runtime. It has not yet run with the real `cactus-compute` package.** The first step on the board is the check in [First run on the board](#first-run-on-the-board).
+**Every older voice command stays on the Vosk grammar.** Instruments, `steady`, `light`, `cancel`, `repeat`, `help`, `pause`, `continue` and `new game` never go through Whistle or Needle, and the two paths never fire each other's words.
 
-## What each model does here
+Status (14 Nov 2026): the adapters were checked against the source of `cactus-compute` 4.2.0 and run on a laptop and on the board. The pipeline works end to end. The published Needle rungs are **not good enough on their own** for free sentences (numbers below); a trigger-word gate and an alarm-only rule keep the game safe. Fine-tuning is the documented way to improve the rungs, and it is postponed until the team decides (it needs no change in the code: a tuned rung is another `.cact` file).
 
-| Path | Default (no Cactus needed) | With Cactus |
-| --- | --- | --- |
-| Commands | Vosk restricted to the command phrases, then the keyword matcher | Unchanged by default. Optional: free speech and Needle ("something to stop the bleeding" → `clamp`) |
-| Quiz answers: hearing | Vosk twice on the same audio: open vocabulary, and the open question's answer phrases | Optional: Whistle instead of the open-vocabulary Vosk |
-| Quiz answers: judging | Keyword evaluator: which option's phrase is in the answer | **Needle for answers that name no option in so many words** ("the thing you cut with" → `scalpel`) |
+## How a segment is decided
 
-Needle picks one function from a list and fills its arguments. It does not chat and it does not grade free text. A quiz answer fits that shape: the question's options are the allowed values of one tool, `answer(choice)`.
+`trainer/voice/understanding.py` (`CommandUnderstanding`). Both recognisers hear the same speech segment.
 
-**Why Needle is not in the command path by default.** A plain "Clamp!" must change the instrument in well under a second, and the restricted vocabulary is what keeps commands reliable in hall noise. Needle needs about a second per call on the board and needs free speech to be of any use. So commands stay as they are, and Needle works where a sentence is expected anyway and one second is acceptable: the answer window of a quiz question.
+1. **Short call with a command phrase** ("Clamp!", under 1.2 s): the Vosk grammar decides at once. Whistle never runs.
+2. **Longer segment, or one the grammar did not catch:** Whistle transcribes it when it ends.
+   - A treatment named outright ("give him adrenaline") counts at any time.
+   - **While an alarm is open** (`InstructionWindow` from the engine), Needle decides sentences that name no treatment, but only if one of the treatments' trigger words is in the sentence (`voice.needle_require_trigger`).
+   - Otherwise the grammar's result stands, as before. During an alarm, a sentence without a treatment gets "Pardon, doctor?"; the second time, the nurse names what she can give.
+3. **Without Whistle** (the default config, or a missing model), the treatment phrases join the Vosk grammar, so the game is playable by voice without any model (criterion T3), and with keys 5, 6, 7.
 
 ## Switching it on
 
-1. Install the runtime on the board (optional requirement):
-   ```sh
-   pip install -r requirements-cactus.txt
-   ```
-2. Put the model files into `app/models/` (git-ignored):
-   - `whistle.cact`: `WITH_CACTUS=1 setup/download_models.sh` downloads it (17 MB).
-   - `needle3-9L.cact`: a 9-layer rung of Needle 3. It is built on a laptop from the checkpoint with the training extras (`cactus build needle3.safetensors --layers 9 --out needle3-9L.cact`, 28 MB) and copied over.
-3. Start with the example config:
-   ```sh
-   python -m trainer --config cactus.toml
-   ```
-   `cactus.toml` switches on Needle for quiz answers. Whistle and Needle for commands are commented out in it.
+1. On the board, in the app's venv: `pip install -r requirements-cactus.txt` (pinned to 4.2.0).
+2. Once, while online: `python -m cactus fetch`. The runtime downloads its engine library on first use, and the app runs it with `HF_HUB_OFFLINE=1`. `WITH_CACTUS=1 setup/download_models.sh` does this and downloads `whistle.cact`.
+3. Copy `needle3-9L.cact` into `app/models/` (built on a laptop, see [Building rungs](#building-rungs)).
+4. `python -m trainer --config cactus.toml`, or set `STEADYHANDS_CONFIG=cactus.toml` for the autostart.
 
-If the package or a file is missing, the app logs one line and runs with the default for that part.
+If the package or a file is missing, the app logs one line and runs as in step 3 of the list above.
 
-## Where the code is
+## What was checked against the runtime
 
-Everything that touches the runtime is in `app/trainer/cactus_models/`. Nothing else imports `cactus`.
+Read in the package source (`cactus/agent/text.py`, `whistle.py`, `_worker.py`, `tools.py`) and confirmed by `tests/test_cactus_real.py` (runs only with the package and the models):
 
-| Piece | File | What it is |
+| Assumption in the first version | Finding | Change |
 | --- | --- | --- |
-| `load_cactus` | `runtime.py` | The only import of the runtime, with telemetry and hub access switched off first |
-| `NeedleAgent` | `needle_agent.py` | One model with a fixed set of tools: text in, at most one `ToolCall` out. Calls `reset()` before every text |
-| `NeedleEvaluator` | `needle_evaluator.py` | `AnswerEvaluator`: keyword evaluator first, Needle only if the answer names no option. One agent per open question, built while the patient asks it |
-| `NeedleInterpreter` | `needle_interpreter.py` | `CommandInterpreter`: a command phrase in the text wins outright, otherwise Needle decides |
-| `WhistleRecognizer` | `whistle_recognizer.py` | `SpeechRecognizer`: transcribes a whole speech segment when it ends |
-| `ActionCatalog` | `../game/actions.py` | The game's commands as tools, and the way back from a tool call to a command word |
-| `build_interpreter`, `build_evaluator`, `build_answer_recognizer`, `build_recognizer` | `../voice/voice_service.py` | Pick the implementations from the config and fall back when one cannot be built |
-| `tools/needle_eval.py` | | The check for the board (below) |
+| `Cactus.run()` executes the tool and returns its confidence | `run()` executes the tools, then runs the model **a second time** on their results and returns that turn's envelope | `NeedleAgent` uses `complete()`, which returns `function_calls`, `suppressed_calls` and `confidence` of the first turn without executing anything. Half the latency |
+| Tools as Python functions with a runtime `Literal` | Works, but the runtime also takes JSON schemas directly | Tools are JSON schemas from `ActionCatalog` |
+| Several agents in one process | Weights other than the published base run in a **worker process** of the runtime's own (one per agent) | `unload()` closes the worker; one Needle agent in the game |
+| `confidence` is a number | `None` for weights without a confidence head (e.g. LoRA builds). Rungs from `cactus build --layers` keep the head | `None` counts as 1.0, with one log line |
+| `transcribe(list_of_floats, ...)` | Takes a float32 array directly; returns `text`, `language`, and `words` with `probability` | `WhistleRecognizer` passes the array |
+| Telemetry and hub off | `CACTUS_TELEMETRY=0` is read per call; `HF_HUB_OFFLINE` must be set before `huggingface_hub` is imported | Unchanged: `load_cactus()` sets both before the import |
+| — | Tool schemas take `triggers`: request regexes (documented, not explained) | Every treatment has triggers; they decide whether Needle picks the right tool (below) |
 
-Config keys, all under `[voice]`: `evaluator`, `interpreter`, `command_vocabulary`, `recognizer`, `answer_engine`, `needle_weights`, `needle_min_confidence`, `whistle_weights`, `whistle_language`.
+## Tools
+
+`ActionCatalog(MODEL_ACTIONS)`: three tools without parameters, each with a one-line description and a trigger regex (`trainer/game/actions.py`). The runtime's docs advise five tools or fewer and plain names.
+
+Whistle gets the treatment phrases and a list of symptom words as `keywords` (`SYMPTOM_WORDS`). Without them it wrote "saps" for "sats" and "waiting up" for "waking up" on synthetic speech.
+
+## Measurements
+
+Test data: `app/tests/data/needle_cases.json`, written 14 Nov 2026 by one author (they share a style; real speakers on the board are the test that counts). 45 treatment sentences without a treatment phrase (15 of them without any trigger word), 25 sentences of talk, 12 status reports with the same medical words as an alarm ("his sats look good now"), 14 older commands in free words. Tool: `app/tools/needle_eval.py`. Pass rule: at least 90 % of the treatment sentences right, and at most one false trigger.
+
+### Tool layout (laptop, 20 sentences, before the full data set)
+
+| Layout | Result |
+| --- | --- |
+| 3 treatment tools without triggers | Every rung picked the same tool for almost every sentence (20L: 7/20, 9L: 7/20) |
+| One `treat_patient(treatment)` tool with an enum | 1–3/20 on every rung |
+| Instrument tool added to the treatments | Clamp 0/8 and scalpel 0/8 on every rung; 17–24 of 25 talk sentences triggered something |
+| 3 treatment tools **with triggers** | 15/15 treatment sentences on 20L, 16L, 12L and 9L |
+
+### Published rungs on the full data set
+
+Laptop (Intel i9-9880H, macOS), and the board (UNO Q, governor `schedutil`, the game running at the same time). Treatment = right out of 45; false = false triggers out of 51 (talk / status / older commands).
+
+| Rung | File | Laptop, gate on | Laptop, no gate (39 talk + older) | Board, gate on | Board: model call median / worst | Board: peak memory |
+| --- | --- | --- | --- | --- | --- | --- |
+| 4L | 15 MB | 28, false 11 (0/11/0) | 31, false 23/39 | 28, false 10 (0/10/0) | 693 / 6490 ms | 61 MB |
+| 6L | 17 MB | 26, false 11 | 30, false 34/39 | 26, false 10 | 699 / 8969 ms | 67 MB |
+| 8L | 27 MB | 29, false 11 | 33, false 38/39 | | | |
+| **9L** | 28 MB | **29, false 11** | 33, false 38/39 | **29, false 11 (0/11/0)** | **1033 / 1313 ms** | **90 MB** |
+| 12L | 39 MB | 29, false 11 | 34, false 32/39 | 29, false 11 | 1242 / 1692 ms | 114 MB |
+| 16L | 51 MB | 29, false 11 | 37, false 32/39 | | | |
+| 20L (published) | 35 MB | 28, false 11 | 33, false 35/39 | | | |
+
+- **No rung passes.** Without the gate, every rung calls a tool for almost any talk. The confidence of those calls is as high as that of right calls (16L: right 0.38–0.86, false 0.44–0.90), so no threshold separates them.
+- With the gate, talk and older commands never trigger (0 of 39), but the model cannot tell "his sats are dropping" from "his sats look good now": 10–11 of 12 status reports trigger. Sentences without a trigger word never reach it (0 of 15).
+- Depth hardly matters with the gate (26–29 of 45). **9L is used:** the same quality as 12L–20L, a steady latency on the board (4L and 6L had outliers of 6–9 s), and the rung the team measured before.
+- What keeps the game safe: Needle only runs while an alarm is open, so a status report outside an alarm does nothing. During an alarm a false trigger is a wrong treatment, which the game treats like any wrong instruction.
+
+### The whole voice path with synthetic speech (`app/tools/voice_drive.py`)
+
+32 cases (16 sentences, two macOS voices): calls, named treatments, free treatment sentences with an alarm open, talk with and without an alarm, status outside an alarm. Played into `VoiceService` block by block, with the app's own builders.
+
+| Setup | Right | End of speech → event, median / worst | Engines loaded |
+| --- | --- | --- | --- |
+| Laptop, `cactus.toml` (Whistle + Needle 9L) | 32/32 (30/32 before the symptom keywords) | 93 / 235 ms | 1.2 s |
+| Laptop, defaults (no model) | 18/32: free treatment sentences are not understood | 10 / 12 ms | 0.6 s |
+| **Board, `cactus.toml`** | **32/32** | **790 / 1860 ms** | 5.6 s |
+| Board, defaults | 18/32 | 87 / 104 ms | 3.1 s |
+
+"End of speech" is when the segmenter closed the segment (after 400 ms of silence for a call, 700 ms for a sentence). These are synthetic voices in clean audio; the test with people in the hall is in [tests.md](tests.md).
+
+### Memory on the board
+
+Full app with `cactus.toml`, menu (14 Nov 2026, 00:01 UTC): MemAvailable 1959–1966 MB; trainer process 364–373 MB RSS (327 MB without the Cactus models, same boot); Needle worker process 89 MB RSS. Disk after installing package, engine and five model files: 1.9 GB free.
+
+## Building rungs
+
+A rung is the published checkpoint cut to N layers. `cactus build --layers N` does it; this command imports JAX (the package's `[train]` extra), inference does not. Nothing is trained.
+
+```sh
+# laptop, separate venv (Python 3.12). On an Intel Mac pin the last wheels that exist for it:
+uv venv --python 3.12 .venv-train
+uv pip install --python .venv-train/bin/python --only-binary sentencepiece,jaxlib,soxr \
+  "cactus-compute[train]==4.2.0" "jax==0.4.38" "jaxlib==0.4.38" "flax>=0.10.2,<0.10.5" \
+  "optax<0.2.5" "numpy<2.2" "sentencepiece<0.2.1"
+CACTUS_TELEMETRY=0 .venv-train/bin/cactus download needle3.safetensors --out checkpoints   # 242 MB
+CACTUS_TELEMETRY=0 .venv-train/bin/cactus build checkpoints/checkpoints/needle3.safetensors --layers 9 --out needle3-9L.cact
+```
+
+About 35 s per rung on the laptop. Output W4A8, so 16L (51 MB) is larger than the published 20L (35 MB, CQ2).
+
+## Next step if the rungs are to get better: fine-tuning (not done)
+
+`cactus finetune data.jsonl` trains a LoRA adapter, `cactus build --lora adapter.safetensors --layers N` merges and cuts it. The Cactus blog reports 18 to 36 points more per depth. What it would need here:
+- training sentences in the runtime's JSONL format, apart from `needle_cases.json` so that a tuned rung is not measured on its own training data; status reports belong in them as "no call";
+- a tuned rung has no confidence head (it reports `None`);
+- the measurement with `needle_eval.py`, gate on and off, on the board.
 
 ## Design rules
 
-- **Keywords first, model second.** An answer or command that contains a known phrase never reaches the model. That keeps the common case fast and saves energy (criterion C3).
-- **"No tool" is a valid answer.** Players talk to each other. Speech that is not a command returns nothing, and the game ignores it. With free speech the keyword matcher's fuzzy guess is not used ("last night" is close to "light"); the model decides.
-- **Two options named means unclear.** If an answer names two options, the recognisers disagreed or the player did. Needle is not asked to guess; the player is asked again.
-- **Every text stands alone.** `agent.reset()` runs before each call. Without it, old context makes the model refuse later texts.
-- **A held-back call is no call.** The runtime does not execute a call below confidence 0.1, and our tools only record calls that are executed.
-- **No network.** The runtime sends telemetry and asks the Hugging Face hub for a file on every transcription unless told otherwise. `load_cactus` sets `CACTUS_TELEMETRY=0` and `HF_HUB_OFFLINE=1` before the import (criteria C2 and C4).
-- **No transcripts outside `VoiceService`.** Do not log the text given to a model.
-- **The defaults need no model.** The minimum version works without a language model (criterion T3).
-
-## First run on the board
-
-```sh
-cd app
-python tools/needle_eval.py models/needle3-9L.cact
-```
-
-It runs 15 command sentences and 12 quiz answers that contain no known phrase (so they do reach the model) and prints how many came out right, the latency, the load time, the time to get ready for a new question, and the memory added. Give it several rungs to compare them.
-
-**The rung has to be chosen again for this game.** In the hand-over the 9-layer rung was the best of 18 rungs for a smart-home tool with two lamps and five test sentences. Rung quality does not grow steadily with depth (rungs 14 to 18 were worse than rungs 9 to 13 there) and depends on the tools. Run 9L, 12L and 19L and keep the smallest one that passes.
-
-Things the code assumes about the runtime, which this run confirms or disproves:
-
-- `cactus.tool` accepts a function whose `Literal` annotation and docstring were set at run time (`choice_tool` in `needle_agent.py`).
-- The agent executes the tool function it picks, and `run()` returns a dict with a top-level `confidence`.
-- Several agents can live in one process (one for commands, one per open question), and building one for a new question is quick. If not, cache by option list or keep one agent and rebuild it.
-- `cactus.transcribe` takes a list of floats, `language`, `keywords`, `word_timestamps` and `weights`, and returns `text` and, with word timestamps, `words` with a `probability` each.
-
-## Numbers from the hand-over
-
-Measured by a team member on another UNO Q, with the CPU governor set to `performance`. They show what to expect; they are not measurements of this app.
-
-| Model | Speed | Memory | File |
-| --- | --- | --- | --- |
-| Needle 3, 9-layer rung | 1009 ms median per call, 97 tokens/s | 90 MB | 28 MB |
-| Needle 3, base (20 layers) | 1659 ms median | 114 MB | 35 MB |
-| Whistle | 0.13 × real time on a 15 s recording | 73 MB | 17 MB |
-
-The hand-over compares the speech models by speed and memory only. It has no accuracy numbers, and it notes that Needle's confidence for the same sentence differs between laptop and board.
-
-## Measure before making any of it the default
-
-Record the numbers in `docs/measurements.md`, on the board, with the full app running.
-
-| What | How | Limit |
-| --- | --- | --- |
-| Needle: right calls | `tools/needle_eval.py` | Every case |
-| Answers: Whistle against Vosk | The same 20 spoken answers with `answer_engine = "vosk"` and `"whistle"` (table in `docs/tests.md`) | Whistle must be better to replace Vosk; no wrong verdicts |
-| Whistle on silence | Leave a question open in a quiet room | No verdict, no "Pardon?" |
-| Memory | `free -m` and process RSS from `logs/metrics.csv`, with and without `cactus.toml` | At least 1 GB available (C1) |
-| Latency | `answer_latency_ms` and `command_latency_ms`, median and worst of 20 | 3–5 s required (P6) |
-| Disk | `df -h /` after installing the package and the files | About 2.7 GB were free before |
-| CPU | Per state from `metrics.csv` | For the energy numbers (C3) |
+- **Names first, model second.** A treatment named outright never waits for the model.
+- **"No tool" is a valid answer**, and a model that fails means no treatment (a wrong treatment harms the patient).
+- **Needle only while an alarm is open**, and only with a trigger word in the sentence.
+- **Every text stands alone:** `reset()` before every call.
+- **No network:** `load_cactus()` sets `CACTUS_TELEMETRY=0` and `HF_HUB_OFFLINE=1` before the import (C2, C4).
+- **No transcripts outside `VoiceService`:** the log holds the treatment word and timing only.
+- **The defaults need no model** (T3).
 
 ## Open points
 
-- Licenses: Whistle is Apache-2.0 (model card). Needle's model license and the license of the `cactus-compute` runtime still need checking.
-- The CPU governor resets to its default at every boot. The numbers above were measured with `performance`; decide whether the app's start script should set it, and measure the power cost.
-- For commands in free speech, pass only the commands that make sense in the current game state (`GameEngine.available_commands()`, `ActionCatalog.schemas(allowed)`). `VoiceService` does not know the game state yet; let the engine publish the list as an event.
+- The test with people: 20 spoken instructions on the board, free and by name, and 20 plain commands as a cross-check ([tests.md](tests.md)).
+- Licences: Whistle is Apache-2.0 (model card), the `cactus-compute` package is Apache-2.0 (its metadata). Needle's model licence still needs checking.
+- The CPU governor: the numbers above are with `schedutil`; the hand-over measured with `performance`.
