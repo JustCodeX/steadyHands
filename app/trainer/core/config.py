@@ -54,6 +54,10 @@ class GameConfig:
     # Largest believable hand movement between two frames; a bigger jump is the
     # ToF beam finding a different target and is ignored.
     position_max_step_mm: float = 25.0
+    # The hand's movement is added to a target the tool then eases towards, so
+    # the deadband's discrete steps come out as one continuous motion rather
+    # than as jumps. Seconds to close the gap; larger is smoother but lags.
+    position_smooth_tau_s: float = 0.22
     # Flip an axis when the sensor faces the opposite way to the screen axis.
     position_invert_x: bool = False
     position_invert_y: bool = True

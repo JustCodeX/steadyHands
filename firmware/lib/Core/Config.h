@@ -73,7 +73,7 @@ constexpr uint16_t POS_MAX_MM = 400;  // maps to the right/bottom edge
 constexpr bool POS_SWAP_AXES = true;
 constexpr uint8_t POS_MEDIAN = 5;
 constexpr uint16_t POS_DEADBAND_MM = 6;
-constexpr float POS_CUTOFF_HZ = 4.0f;  // output smoothing
+constexpr float POS_CUTOFF_HZ = 6.0f;  // output smoothing
 // No valid echo for this long (hand out of range, beam missing the wall) is
 // reported as "no reading" instead of silently holding the last position.
 constexpr uint32_t POS_STALE_MS = 800;

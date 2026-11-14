@@ -66,9 +66,10 @@ class GameEngine(Service):
         self._prev_knob: int | None = None
         self._last_frame: InputFrame | None = None
         self._last_pos_frame: InputFrame | None = None
-        # position mode: (hand_x, hand_y, tool_x, tool_y) captured as the zero
-        # position mode: the previous frame's two distances in mm
-        self._pos_prev: tuple[float, float] | None = None
+        # position mode: each axis' previous distance in mm (None while that
+        # sensor has no echo), and the point the tool is easing towards
+        self._pos_prev: tuple[float | None, float | None] | None = None
+        self._pos_target: tuple[float, float] | None = None
         self._frame_count = 0
         self._menu_index = 0
         self._mcu_connected = False
@@ -122,6 +123,7 @@ class GameEngine(Service):
         self.level.reset()
         self.x, self.y = float(self.level.start[0]), float(self.level.start[1])
         self._pos_prev = None  # start from the level's start point, not the hand
+        self._pos_target = None
         self.patient.reset()
         self.metrics.start()
         self.mode.reset()
@@ -183,14 +185,18 @@ class GameEngine(Service):
     # --- input ---------------------------------------------------------------
 
     def on_input(self, frame: InputFrame) -> None:
+        if frame.source == self.cfg.position_source:
+            self._last_pos_frame = frame
+        if frame.source == "remote":
+            # The remote only measures; its buttons and knob are always zero and
+            # would otherwise fight the real ones frame by frame.
+            return
         pressed = frame.buttons & ~self._prev_buttons  # rising edges
         self._prev_buttons = frame.buttons
         if self._prev_knob is None:
             self._prev_knob = frame.knob
         knob_delta = frame.knob - self._prev_knob
         self._prev_knob = frame.knob
-        if frame.source == self.cfg.position_source:
-            self._last_pos_frame = frame
         self._last_frame = frame
         self._frame_count += 1
 
@@ -372,21 +378,14 @@ class GameEngine(Service):
         other than the wall and is dropped.
         """
         assert self.level is not None
-        if not frame.distance_mm or not frame.distance_y_mm:
-            self._pos_prev = None  # no echo: wait for a fresh pair to compare
+        # The axes are independent: one sensor losing its echo must not freeze
+        # the other, it only stops contributing until it sees the wall again.
+        prev_x, prev_y = self._pos_prev if self._pos_prev is not None else (None, None)
+        dx_mm, prev_x = self._axis_delta(frame.distance_mm, prev_x)
+        dy_mm, prev_y = self._axis_delta(frame.distance_y_mm, prev_y)
+        self._pos_prev = (prev_x, prev_y)
+        if dx_mm == 0.0 and dy_mm == 0.0:
             return
-        mm_x, mm_y = float(frame.distance_mm), float(frame.distance_y_mm)
-        if self._pos_prev is None:
-            self._pos_prev = (mm_x, mm_y)
-            return
-        dx_mm = mm_x - self._pos_prev[0]
-        dy_mm = mm_y - self._pos_prev[1]
-        self._pos_prev = (mm_x, mm_y)
-        limit = self.cfg.position_max_step_mm
-        if abs(dx_mm) > limit:
-            dx_mm = 0.0
-        if abs(dy_mm) > limit:
-            dy_mm = 0.0
         if self.cfg.position_invert_x:
             dx_mm = -dx_mm
         if self.cfg.position_invert_y:
@@ -397,7 +396,38 @@ class GameEngine(Service):
         vx = dx_mm * scale / max(dt, 1e-6) / self.cfg.speed_px_per_s
         vy = dy_mm * scale / max(dt, 1e-6) / self.cfg.speed_px_per_s
         self.metrics.add_tilt(vx, vy, math.hypot(vx, vy) > self.cfg.deadzone_g)
-        self._step_towards(self.x + dx_mm * scale, self.y + dy_mm * scale, now)
+
+        # The hand's movement goes onto a target the tool eases towards: the
+        # sensors deliver whole millimetres, which would otherwise show up as a
+        # staircase of jumps rather than one movement.
+        if self._pos_target is None:
+            self._pos_target = (self.x, self.y)
+        tx = min(max(self._pos_target[0] + dx_mm * scale, 0.0), self.width - 1.0)
+        ty = min(max(self._pos_target[1] + dy_mm * scale, 0.0), self.height - 1.0)
+        self._pos_target = (tx, ty)
+        alpha = dt / (self.cfg.position_smooth_tau_s + dt)
+        nx = self.x + (tx - self.x) * alpha
+        ny = self.y + (ty - self.y) * alpha
+        self._step_towards(nx, ny, now)
+        # Against a wall the tool stops but the target would keep running away,
+        # so bring it back to where the tool actually got to.
+        if math.hypot(nx - self.x, ny - self.y) > 1.0:
+            self._pos_target = (self.x, self.y)
+
+    def _axis_delta(self, mm: int, prev: float | None) -> tuple[float, float | None]:
+        """How far this axis moved since the last frame, and the new reference.
+
+        0 mm means the sensor has no echo; the reference is dropped so the axis
+        picks up again from wherever the hand is when the wall comes back.
+        """
+        if not mm:
+            return 0.0, None
+        if prev is None:
+            return 0.0, float(mm)
+        delta = float(mm) - prev
+        if abs(delta) > self.cfg.position_max_step_mm:
+            return 0.0, float(mm)  # the beam found another target, not the hand
+        return delta, float(mm)
 
     def _step_towards(self, nx: float, ny: float, now: float) -> None:
         """Walk to (nx, ny) in sub-steps so a hand jump cannot tunnel a wall."""

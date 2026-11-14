@@ -123,9 +123,12 @@ bool PositionAxis::stale(uint32_t nowMs) const {
   return lastGoodMs == 0 || nowMs - lastGoodMs > cfg::POS_STALE_MS;
 }
 
-// A reading only becomes the new held position once it is further away than
-// the deadband: hand tremor and sensor noise leave the tool exactly where it
-// is, while a deliberate move takes it along.
+// The deadband drags along instead of re-arming after every step: once the
+// hand has pushed past it, the held position follows the reading continuously,
+// trailing it by exactly POS_DEADBAND_MM. Snapping the held value onto the
+// reading instead would move it by the whole deadband at once and then sit
+// still until the next breakout - a staircase rather than a movement. Noise
+// smaller than the band still never moves anything.
 void PositionSensor::feed(PositionAxis& axis, ToFReader& tof, uint32_t nowMs) {
   if (!tof.poll()) {
     // Silent for a while although the chip is still there: kick its ranging.
@@ -139,9 +142,14 @@ void PositionSensor::feed(PositionAxis& axis, ToFReader& tof, uint32_t nowMs) {
   axis.push(tof.lastMm());
   axis.lastGoodMs = nowMs;
   const uint16_t mm = axis.median();
+  const int32_t band = cfg::POS_DEADBAND_MM;
   const int32_t delta = static_cast<int32_t>(mm) - static_cast<int32_t>(axis.heldMm);
-  if (axis.heldMm == 0 || delta > cfg::POS_DEADBAND_MM || delta < -static_cast<int32_t>(cfg::POS_DEADBAND_MM)) {
+  if (axis.heldMm == 0) {
     axis.heldMm = mm;
+  } else if (delta > band) {
+    axis.heldMm = static_cast<uint16_t>(mm - band);
+  } else if (delta < -band) {
+    axis.heldMm = static_cast<uint16_t>(mm + band);
   }
   axis.filter.update(normalise(axis.heldMm));
 }
