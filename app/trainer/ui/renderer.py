@@ -67,6 +67,7 @@ class Renderer(Service):
         self._asr_panel_on = cfg.debug_panel
         self.frame: InputFrame | None = None
         self.remote_frame: InputFrame | None = None
+        self._prev_buttons = 0
         bus.subscribe(GameSnapshot, self._on_snapshot)
         bus.subscribe(VoiceStateChanged, self._on_voice)
         bus.subscribe(IdleChanged, self._on_idle)
@@ -141,8 +142,16 @@ class Renderer(Service):
         # the local MCU; the panel wants whichever frame carries the sensors.
         if frame.source == "remote":
             self.remote_frame = frame
-        elif frame.source == "mcu":
-            self.frame = frame
+            return
+        if frame.source != "mcu":
+            return
+        self.frame = frame
+        # Button C on the pause screen shows and hides this panel. Pause is the
+        # one state where C is free, and the screen next to it lists the keys.
+        pressed = frame.buttons & ~self._prev_buttons
+        self._prev_buttons = frame.buttons
+        if pressed & InputFrame.BTN_C and self.snapshot is not None and self.snapshot.state is GameState.PAUSED:
+            self._asr_panel_on = not self._asr_panel_on
 
     def _on_asr_debug(self, ev: AsrDebugEvent) -> None:
         self._asr_panel_on = True

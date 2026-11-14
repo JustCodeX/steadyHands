@@ -53,10 +53,15 @@ class PauseOverlay:
             pygame.draw.line(card, theme.PANEL_LINE, (40, 306), (self.W - 40, 306), 2)
             # Two ways out of the pause screen, side by side on one line.
             cont = self.fonts.text("body", "to continue", theme.TEXT)
-            quit_ = self.fonts.text("body", "back to the menu", theme.TEXT)
-            b, a = self.glyphs.button("B", 34), self.glyphs.button("A", 34)
-            gap = 36
-            total = b.get_width() + 10 + cont.get_width() + gap + a.get_width() + 10 + quit_.get_width()
+            quit_ = self.fonts.text("body", "to the menu", theme.TEXT)
+            panel = self.fonts.text("body", "sensor panel", theme.MUTED)
+            b, a, c = self.glyphs.button("B", 34), self.glyphs.button("A", 34), self.glyphs.button("C", 34)
+            gap = 28
+            total = (
+                b.get_width() + 10 + cont.get_width() + gap
+                + a.get_width() + 10 + quit_.get_width() + gap
+                + c.get_width() + 10 + panel.get_width()
+            )
             x = (self.W - total) // 2
             baseline = self.H - 50
             card.blit(b, (x, baseline))
@@ -66,6 +71,10 @@ class PauseOverlay:
             card.blit(a, (x, baseline))
             x += a.get_width() + 10
             card.blit(quit_, (x, baseline + 17 - quit_.get_height() // 2))
+            x += quit_.get_width() + gap
+            card.blit(c, (x, baseline))
+            x += c.get_width() + 10
+            card.blit(panel, (x, baseline + 17 - panel.get_height() // 2))
             self._cards[coop] = card
         return self._cards[coop]
 

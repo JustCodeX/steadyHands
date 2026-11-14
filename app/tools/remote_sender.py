@@ -107,12 +107,12 @@ def main(argv: list[str] | None = None) -> int:
                 elif ok & SENSOR_TOF_X and ok & SENSOR_TOF_Y:
                     state = "both"
                 elif ok & (SENSOR_TOF_X | SENSOR_TOF_Y):
-                    state = "one only (the other is not on the bus)"
+                    state = "one only, searching"
                 else:
                     state = "none"
                 log.info(
-                    "x=%4d mm  y=%4d mm  sensors=%s  bits=0x%02X  sent=%d",
-                    latest["x"], latest["y"], state, ok, seq,
+                    "x=%4d mm  y=%4d mm  sensors=%s  bits=0x%02X  buttons=0x%02X  sent=%d",
+                    latest["x"], latest["y"], state, ok, latest["b"], seq,
                 )
             time.sleep(period)
     except KeyboardInterrupt:
