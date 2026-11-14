@@ -1,104 +1,79 @@
-# Steady Hands (working title)
+# Steady Hands
 
-A working prototype of a voice-controlled surgeon trainer on the Arduino UNO Q, inspired by the steady-hand game Dr. Bibber. Built by team PromptPimps at the Speech-to-Speech hackathon (13–14 November 2026, Nürnberg).
+A voice-controlled surgeon trainer that runs entirely offline on an Arduino UNO Q. Built by team PromptPimps at the Speech-to-Speech hackathon (13–14 November 2026, Nürnberg), for medical students and operating-room trainees.
 
-You guide a surgical instrument through a patient map on a 7-inch screen by tilting the instrument in your hand. You call for instruments by voice ("forceps!", "clamp!"), as in a real operating room, and touching a wall plays a buzz and the patient cries out. After each round, the trainer shows your time, wall contacts, and steadiness. While you operate, the patient asks questions that you answer out loud in a whole sentence; a wrong answer makes the rest of the round harder. In co-op mode, the surgeon calls for an instrument and the assistant has to pick and hand over exactly that one, the way operating-room teams close the loop on instructions. Speech recognition, game logic, and speech output run entirely offline on the board, and no audio is stored.
+You steer a surgical instrument through a wound on a 7-inch screen by tilting it in your hand. Both hands are busy, so everything else is done by voice: you call for instruments like in a real operating room, and you give the anaesthesia nurse orders with a dose while the patient's vital signs go wrong. Speech recognition, game logic and speech output run on the board. No audio leaves the device, and none is stored.
 
-## Documents
+## A round
 
-| Document | Contents |
-| --- | --- |
-| [PLAN.md](PLAN.md) | Idea, decisions, architecture, interfaces, work split, milestones, risks |
-| [WIRING.md](WIRING.md) | Parts list, wiring, pin assignment, power, energy measurement |
-| [firmware/README.md](firmware/README.md) | MCU sketch with PlatformIO: build, flash, Bridge interface, one-time setup on each board |
-| [app/README.md](app/README.md) | Linux app: structure, setup on the board, running, tests |
-| [levels/README.md](levels/README.md) | Level format (mask PNG + JSON) |
+- **Steer** the instrument (a handle with a Modulino Movement inside) through the corridors. Touching a wall buzzes, the patient cries out, and the pulse goes up. Three touches and the patient wakes up.
+- **Call instruments** by voice: "Forceps!", "Clamp!", "Swab!", "Scalpel!". Remove the splinter, clamp the bleeding, swab the blood before the time runs out. `steady`, `light`, `cancel`, `repeat`, `help`, `pause` work too.
+- **Watch the monitor** (from level 2 on): oxygen saturation, depth of anaesthesia (BIS) and blood pressure. When one goes wrong, the nurse raises the alarm. Order a drug and an amount: "Propofol 40.", "Oxygen to 60 percent.", "Push 10 micrograms of adrenaline." Each tile shows a dose card ("10 mg: −6"), so the monitor tells you the dose:
+  - too little helps only part of the way ("BIS still at 63, doctor"), so you give more;
+  - too much overshoots into the opposite alarm;
+  - the wrong drug only brings its side effects.
+
+  The nurse reads every order back, the way OR teams close the loop.
+- **Co-op mode:** the surgeon calls, the assistant picks the instrument with the knob and hands it over with a button. Only the called one counts.
+- **Feedback** after each round, on screen and spoken: time, wall contacts, steadiness of the hand, orders right, overdoses, crises.
+
+## Speech
+
+| What you say | How it is heard | Model |
+| --- | --- | --- |
+| Commands ("Clamp!", "pause") | Vosk, restricted to the command phrases | Vosk small English (40 MB) |
+| Orders with a dose ("Propofol 40 and oxygen to 70") | Whistle transcribes the sentence; Needle reads drug and amount as a tool call (`set_oxygen(percent)`, `give_propofol(milligrams)`, `give_adrenaline(micrograms)`) | [Cactus](https://cactuscompute.com) Whistle (17 MB) and Needle 3, 12-layer rung (39 MB) |
+| Spoken lines of the patient and the nurse | Pre-rendered once at setup, two voices | Piper |
+
+- The two speech paths never fire each other's words.
+- An order has to name the drug. Talk without a drug name never becomes an order.
+- An amount the model invents is dropped: the runtime checks every number against the sentence.
+- A drug named without an amount gets a standard dose, which fits only about half of the time.
+- Without the Cactus models, the game still works by voice: drugs by name at the standard dose, no amounts.
+
+**Measured on the board** (14 Nov): Needle reads 40 of 42 test orders right, with no false order from 14 sentences of talk, in about 1.9 s per order. Short commands are decided in under 0.1 s. The full app with both models leaves 1.9 GB of the 3.7 GB RAM free. Details: [docs/needle-integration.md](docs/needle-integration.md), [docs/measurements.md](docs/measurements.md).
 
 ## Hardware
 
-- **Arduino UNO Q:** Linux (QRB2210) for the game, display, and speech; MCU (STM32U585) for the sensors and the status LEDs
-- **Display:** Elecrow 7" IPS over HDMI, through a USB-C hub
-- **Modulinos:** Movement (tilt), Buttons, Knob, optionally Distance, chained over Qwiic
-- **Audio:** headset
-- **Signals:** the wall buzz plays in the game, through the headset
-
-## Hardware wiring
+Arduino UNO Q (Linux side: game, display, speech; MCU side: sensors, status LED) · Elecrow 7" display over HDMI · USB headset · Modulino Movement, Buttons and Knob over Qwiic · USB-C hub with power supply. Wiring: [WIRING.md](WIRING.md).
 
 ```mermaid
 flowchart LR
-  PSU["USB-C PD power supply"] --> HUB["USB-C hub<br/>PD in, HDMI, USB-A"]
-  HUB -- "USB-C: power, DisplayPort, USB" --- Q["Arduino UNO Q"]
-  HUB -- "HDMI + 5 V USB" --> DISP["Elecrow 7-inch IPS"]
-  HUB -- "USB-A" --> HS["Headset"]
-  Q -- "Qwiic (Wire1, 3.3 V)" --> B["Modulino Buttons"]
-  B -- "Qwiic" --> K["Modulino Knob"]
-  K -- "Qwiic" --> DI["Modulino Distance (optional)"]
-  DI -- "long Qwiic cable" --> M["Modulino Movement<br/>in the instrument"]
+  M["Modulino Movement<br/>(instrument)"] -- Qwiic --> MCU
+  BK["Modulino Buttons + Knob"] -- Qwiic --> MCU
+  subgraph Q["Arduino UNO Q"]
+    MCU["MCU firmware<br/>PlatformIO, C++"] -- "Bridge RPC, 50 Hz" --> APP["Linux app, Python<br/>game · voice · sound · display"]
+  end
+  HS["Headset"] <--> APP
+  APP --> D["7-inch display"]
 ```
 
-Pin-level diagram, circuits, power, and measurement: [WIRING.md](WIRING.md).
+Every part is a class behind a small interface: a `Module` on the MCU, a `Service` on an `EventBus` in the app. Design and class diagrams: [PLAN.md](PLAN.md#code-design).
 
-## Code structure (UML)
+## Quick start
 
-All code is object-oriented and modular. On the MCU, every hardware part is a `Module`. On Linux, every feature is a `Service` that communicates over the `EventBus`. `BridgeLink` (MCU) and `McuLink` (Linux) connect the two sides.
-
-```mermaid
-classDiagram
-  direction TB
-  class Module {
-    <<interface>>
-    +begin()
-    +update(nowMs)
-  }
-  class InputSource {
-    <<interface>>
-    +fill(frame)
-  }
-  class Service {
-    <<abstract>>
-    +start()
-    +stop()
-  }
-  class EventBus {
-    +subscribe(event_type, handler)
-    +publish(event)
-  }
-  Firmware o-- Module
-  Module <|-- InputSource
-  InputSource <|.. TiltSensor
-  InputSource <|.. ButtonPanel
-  InputSource <|.. KnobInput
-  Module <|.. StatusLed
-  Module <|.. BridgeLink
-  BridgeLink .. McuLink : Bridge RPC
-  App o-- Service
-  App *-- EventBus
-  Service <|-- McuLink
-  Service <|-- VoiceService
-  Service <|-- GameEngine
-  Service <|-- SoundService
-  Service <|-- Renderer
-  Service <|-- PowerManager
+```sh
+cd firmware && tools/board.sh upload           # build and flash the MCU (runs PlatformIO on the board)
+app/tools/sync_to_board.sh                     # copy app/ and levels/ to the board
+app/setup/board_setup.sh                       # on the board, once: packages, models, spoken clips
+app/run.sh                                     # on the board: start the trainer
+app/run.sh --config cactus.toml                # ... with Whistle + Needle (orders with doses)
+cd app && python -m pytest                     # tests, on any computer
+cd app && python -m trainer --windowed --no-mcu   # play on a laptop with the keyboard
 ```
 
-Full class diagrams, design rules, and how to add a feature: [PLAN.md](PLAN.md#code-design).
+Setting up Whistle and Needle (package, engine, building the rung): [docs/needle-integration.md](docs/needle-integration.md#switching-it-on).
+
+## Repository
+
+| Path | Contents |
+| --- | --- |
+| [firmware/](firmware/README.md) | MCU sketch: sensor modules, status LED, Bridge link |
+| [app/](app/README.md) | Linux app: game engine, vitals monitor, voice pipeline, sound, UI, tools, tests |
+| [levels/](levels/README.md) | Six levels: a PNG mask plus a JSON file each |
+| [PLAN.md](PLAN.md) | Idea, gameplay, architecture, speech pipeline, energy, hackathon criteria check |
+| [docs/](docs/README.md) | Measurements, test runs, the Cactus integration, board cheat sheet |
 
 ## Status
 
-Code skeleton built (13 November, afternoon): the MCU firmware (all modules, Bridge link) and the Linux app (game, display, voice pipeline, sound, idle mode, metrics) exist and pass their tests. Decided: a surgeon-training prototype for medical students; English; one-player mode with optional co-op; mic listening during play; Vosk for speech-to-text (D2).
-
-**Definition of done:** the project is finished only when every hackathon criterion in the [criteria check](PLAN.md#hackathon-criteria-check) is verified on the real board. See [PLAN.md](PLAN.md#decisions) for open questions.
-
-```sh
-cd firmware && tools/board.sh upload        # build and flash the MCU over USB
-app/tools/sync_to_board.sh                  # copy app/ and levels/ to the board
-app/setup/board_setup.sh                    # on the board, once: packages, models, clips
-app/run.sh                                  # on the board: start the trainer
-cd app && python -m pytest                  # tests, on any computer
-```
-
-## Working together
-
-- `main` should always build. Work on short-lived branches per area (`voice/...`, `game/...`, `hw/...`, `docs/...`) and merge often.
-- All code is object-oriented and modular. New features are new classes behind the existing interfaces; see [Adding a feature](PLAN.md#adding-a-feature).
-- Never commit audio recordings or downloaded models. `.gitignore` excludes `models/`, `recordings/`, and build output; the setup scripts download models.
+Hackathon prototype. Every feature above runs on the board. The hackathon criteria and the evidence for each are tracked in the [criteria check](PLAN.md#hackathon-criteria-check). Some rows are still open, among them real-speaker tests of the spoken orders and the energy measurements. The licence for our code is not decided yet (PLAN.md, D5).

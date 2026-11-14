@@ -90,6 +90,9 @@ time with its own Needle worker.
 | 9L | Board | 36 | 0 | 1228 | 2031 | 91 |
 | 12L | Laptop (Intel i9) | 40 | 0 | 131 | 200 | 113 |
 
+Memory on the board with 12L, menu, full app (14 Nov, 01:20 UTC):
+MemAvailable 1911 MB; trainer process 380 MB RSS, Needle worker 118 MB RSS.
+
 All rungs on the laptop: [needle-integration.md](needle-integration.md#measurements).
 
 Whole voice path with synthetic voices (`tools/voice_drive.py`, 32 cases,
