@@ -1,9 +1,20 @@
+# Board 1 (geil): game, display, microphone, buttons and knob.
+# The two distance sensors live on the remote (maxuno) and arrive over UDP.
+
 [voice]
 debug_asr = true
 
 [display]
 debug_panel = true
 
+[remote]
+enabled = true
+port = 9876
+
 [game]
 input_mode = "position"
+position_source = "remote"
 invincible = true
+
+[system]
+idle_timeout_s = 86400.0

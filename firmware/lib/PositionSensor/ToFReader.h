@@ -101,9 +101,15 @@ public:
     } else {
       return false;  // nothing there, or two chips fighting over 0x29
     }
+    addr7_ = addr7;
     started_ = true;
     return true;
   }
+
+  // Ranging can stop without the chip dropping off the bus — a hot-plug glitch
+  // on the chain is enough. Re-running init from the address it already has
+  // brings it back without touching the other sensor.
+  bool restart() { return addr7_ != 0 && begin(addr7_, addr7_); }
 
   bool started() const { return started_; }
   uint16_t lastId() const { return lastId_; }
@@ -152,6 +158,7 @@ private:
   ToFED* ed_ = nullptr;
   uint16_t lastMm_ = 0;
   uint16_t lastId_ = 0;
+  uint8_t addr7_ = 0;
   bool started_ = false;
 };
 

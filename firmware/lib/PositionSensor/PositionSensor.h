@@ -14,13 +14,32 @@
 
 namespace sh {
 
+// One axis: raw samples in, a steady held distance out. The median rejects
+// single bad readings, the deadband rejects sensor noise, and the low-pass
+// smooths the step the deadband lets through.
+struct PositionAxis {
+  explicit PositionAxis(float cutoffHz, float sampleHz) : filter(cutoffHz, sampleHz) {}
+
+  LowPassFilter filter;
+  uint16_t samples[cfg::POS_MEDIAN] = {0};
+  uint8_t filled = 0;
+  uint8_t next = 0;
+  uint16_t heldMm = 0;
+  uint32_t lastGoodMs = 0;
+  uint32_t lastRestartMs = 0;
+
+  void push(uint16_t mm);
+  uint16_t median() const;
+  bool stale(uint32_t nowMs) const;
+};
+
 class PositionSensor : public InputSource {
 public:
   PositionSensor()
       : tofX_(Wire1, cfg::PIN_TOF_XSHUT),
         tofY_(Wire1),
-        filterX_(cfg::POS_CUTOFF_HZ, cfg::SLOW_HZ),
-        filterY_(cfg::POS_CUTOFF_HZ, cfg::SLOW_HZ) {}
+        axisX_(cfg::POS_CUTOFF_HZ, cfg::SLOW_HZ),
+        axisY_(cfg::POS_CUTOFF_HZ, cfg::SLOW_HZ) {}
 
   const char* name() const override { return "position"; }
   bool begin() override;
@@ -40,17 +59,16 @@ private:
   static bool healthy(uint16_t modelId);
   bool haveXshutWire() const;
   void bringUp();
+  void feed(PositionAxis& axis, ToFReader& tof, uint32_t nowMs);
 
   ToFReader tofX_;
   ToFReader tofY_;
-  LowPassFilter filterX_;
-  LowPassFilter filterY_;
+  PositionAxis axisX_;
+  PositionAxis axisY_;
   bool foundX_ = false;
   bool foundY_ = false;
   bool hub_ = false;
   bool collision_ = false;
-  uint16_t lastXMm_ = 0;
-  uint16_t lastYMm_ = 0;
   uint32_t lastPollMs_ = 0;
   uint32_t lastRetryMs_ = 0;
 };

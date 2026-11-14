@@ -97,6 +97,55 @@ float PositionSensor::normalise(uint16_t mm) {
   return n * 2.0f - 1.0f;
 }
 
+void PositionAxis::push(uint16_t mm) {
+  samples[next] = mm;
+  next = (next + 1) % cfg::POS_MEDIAN;
+  if (filled < cfg::POS_MEDIAN) ++filled;
+}
+
+uint16_t PositionAxis::median() const {
+  if (filled == 0) return 0;
+  uint16_t sorted[cfg::POS_MEDIAN];
+  for (uint8_t i = 0; i < filled; ++i) sorted[i] = samples[i];
+  for (uint8_t i = 1; i < filled; ++i) {  // insertion sort, at most 5 elements
+    const uint16_t v = sorted[i];
+    int8_t j = static_cast<int8_t>(i) - 1;
+    while (j >= 0 && sorted[j] > v) {
+      sorted[j + 1] = sorted[j];
+      --j;
+    }
+    sorted[j + 1] = v;
+  }
+  return sorted[filled / 2];
+}
+
+bool PositionAxis::stale(uint32_t nowMs) const {
+  return lastGoodMs == 0 || nowMs - lastGoodMs > cfg::POS_STALE_MS;
+}
+
+// A reading only becomes the new held position once it is further away than
+// the deadband: hand tremor and sensor noise leave the tool exactly where it
+// is, while a deliberate move takes it along.
+void PositionSensor::feed(PositionAxis& axis, ToFReader& tof, uint32_t nowMs) {
+  if (!tof.poll()) {
+    // Silent for a while although the chip is still there: kick its ranging.
+    if (axis.lastGoodMs != 0 && nowMs - axis.lastGoodMs > cfg::POS_REVIVE_MS &&
+        nowMs - axis.lastRestartMs > cfg::POS_REVIVE_MS) {
+      axis.lastRestartMs = nowMs;
+      tof.restart();
+    }
+    return;
+  }
+  axis.push(tof.lastMm());
+  axis.lastGoodMs = nowMs;
+  const uint16_t mm = axis.median();
+  const int32_t delta = static_cast<int32_t>(mm) - static_cast<int32_t>(axis.heldMm);
+  if (axis.heldMm == 0 || delta > cfg::POS_DEADBAND_MM || delta < -static_cast<int32_t>(cfg::POS_DEADBAND_MM)) {
+    axis.heldMm = mm;
+  }
+  axis.filter.update(normalise(axis.heldMm));
+}
+
 void PositionSensor::update(uint32_t nowMs) {
   if ((!foundX_ || !foundY_) && nowMs - lastRetryMs_ >= cfg::RETRY_MS) {
     lastRetryMs_ = nowMs;
@@ -104,25 +153,28 @@ void PositionSensor::update(uint32_t nowMs) {
   }
   if (nowMs - lastPollMs_ < 1000 / cfg::SLOW_HZ) return;
   lastPollMs_ = nowMs;
-  // Invalid or stale readings (hand out of range, oblique wall hit) keep the
-  // last position instead of jerking the tool around.
-  if (foundX_ && tofX_.poll()) {
-    lastXMm_ = tofX_.lastMm();
-    filterX_.update(normalise(lastXMm_));
-  }
-  if (foundY_ && tofY_.poll()) {
-    lastYMm_ = tofY_.lastMm();
-    filterY_.update(normalise(lastYMm_));
-  }
+  if (foundX_) feed(axisX_, tofX_, nowMs);
+  if (foundY_) feed(axisY_, tofY_, nowMs);
 }
 
 void PositionSensor::fill(InputFrame& frame) {
-  frame.tiltX = filterX_.value();
-  frame.tiltY = filterY_.value();
-  frame.distanceMm = lastXMm_;
-  frame.distanceYMm = lastYMm_;
-  if (foundX_) frame.sensorsOk |= InputFrame::TOF_X;
-  if (foundY_) frame.sensorsOk |= InputFrame::TOF_Y;
+  const uint32_t now = millis();
+  // Whichever module ends up driving screen X is reported as tiltX/distanceMm,
+  // so the debug panel keeps matching what the tool actually does.
+  const PositionAxis& ax = cfg::POS_SWAP_AXES ? axisY_ : axisX_;
+  const PositionAxis& ay = cfg::POS_SWAP_AXES ? axisX_ : axisY_;
+  frame.tiltX = ax.filter.value();
+  frame.tiltY = ay.filter.value();
+  // Report 0 mm while an axis has no fresh echo, so the panel says so instead
+  // of showing a stale number next to a tool that silently stopped following.
+  frame.distanceMm = ax.stale(now) ? 0 : ax.heldMm;
+  frame.distanceYMm = ay.stale(now) ? 0 : ay.heldMm;
+  // The status bits follow the same swap, so each panel row reports the sensor
+  // that actually drives that screen axis.
+  const bool okX = cfg::POS_SWAP_AXES ? foundY_ : foundX_;
+  const bool okY = cfg::POS_SWAP_AXES ? foundX_ : foundY_;
+  if (okX) frame.sensorsOk |= InputFrame::TOF_X;
+  if (okY) frame.sensorsOk |= InputFrame::TOF_Y;
   if (collision_) frame.sensorsOk |= InputFrame::TOF_CLASH;
   if (foundX_ && foundY_) frame.sensorsOk |= InputFrame::DISTANCE;
 }

@@ -17,6 +17,7 @@ from .game.engine import GameEngine
 from .game.level import LevelCatalog
 from .hardware.keyboard_input import KeyboardInput
 from .hardware.mcu_link import McuLink
+from .hardware.remote_input import RemoteInput
 from .system.metrics_logger import MetricsLogger
 from .system.power_manager import PowerManager
 from .ui.renderer import Renderer
@@ -34,6 +35,8 @@ def build_app(cfg, *, mcu: bool, voice: bool, sound: bool, keyboard: bool, displ
         app.register(KeyboardInput(bus))
     if mcu:
         app.register(McuLink(bus, cfg.mcu, cfg.game.alarm_ms))
+    if cfg.remote.enabled:
+        app.register(RemoteInput(bus, cfg.remote))
     if sound:
         app.register(SoundService(bus, cfg.audio))
     if voice:

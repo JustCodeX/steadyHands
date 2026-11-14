@@ -65,6 +65,7 @@ class Renderer(Service):
         self.asr_log: deque[AsrDebugEvent] = deque(maxlen=6)
         self._asr_panel_on = cfg.debug_panel
         self.frame: InputFrame | None = None
+        self.remote_frame: InputFrame | None = None
         bus.subscribe(GameSnapshot, self._on_snapshot)
         bus.subscribe(VoiceStateChanged, self._on_voice)
         bus.subscribe(IdleChanged, self._on_idle)
@@ -130,7 +131,11 @@ class Renderer(Service):
         self.idle = ev.idle
 
     def _on_frame(self, frame: InputFrame) -> None:
-        if frame.source == "mcu":
+        # The distances may come from the remote board while buttons come from
+        # the local MCU; the panel wants whichever frame carries the sensors.
+        if frame.source == "remote":
+            self.remote_frame = frame
+        elif frame.source == "mcu":
             self.frame = frame
 
     def _on_asr_debug(self, ev: AsrDebugEvent) -> None:
@@ -186,11 +191,12 @@ class Renderer(Service):
 
     def _draw_sensor_block(self, s: pygame.Surface, x: int, y: int, w: int) -> int:
         """Live distance readings and the raw axis values, for calibration."""
-        f = self.frame
-        self.fonts.draw(s, "small", "SENSORS (mm to wall)", theme.ACCENT, (x, y))
+        f = self.remote_frame or self.frame
+        label = "SENSORS (remote)" if self.remote_frame is not None else "SENSORS (mm to wall)"
+        self.fonts.draw(s, "small", label, theme.ACCENT, (x, y))
         y += 26
         if f is None:
-            self.fonts.draw(s, "small", "no MCU frames", theme.BAD, (x, y))
+            self.fonts.draw(s, "small", "no input frames", theme.BAD, (x, y))
             return y + 30
         axes = (
             ("X <- left", f.distance_mm, f.tilt_x, f.sensors_ok & InputFrame.SENSOR_TOF_X),

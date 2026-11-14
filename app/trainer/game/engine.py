@@ -65,6 +65,10 @@ class GameEngine(Service):
         self._prev_buttons = 0
         self._prev_knob: int | None = None
         self._last_frame: InputFrame | None = None
+        self._last_pos_frame: InputFrame | None = None
+        # position mode: (hand_x, hand_y, tool_x, tool_y) captured as the zero
+        # position mode: the previous frame's two distances in mm
+        self._pos_prev: tuple[float, float] | None = None
         self._frame_count = 0
         self._menu_index = 0
         self._mcu_connected = False
@@ -117,6 +121,7 @@ class GameEngine(Service):
             return
         self.level.reset()
         self.x, self.y = float(self.level.start[0]), float(self.level.start[1])
+        self._pos_prev = None  # start from the level's start point, not the hand
         self.patient.reset()
         self.metrics.start()
         self.mode.reset()
@@ -153,6 +158,7 @@ class GameEngine(Service):
 
     def resume(self) -> None:
         if self.state is GameState.PAUSED:
+            self._pos_prev = None  # the hand has probably moved while paused
             self.state = GameState.PLAYING
             self.bus.publish(GameEvent(kind="resumed"))
 
@@ -183,6 +189,8 @@ class GameEngine(Service):
             self._prev_knob = frame.knob
         knob_delta = frame.knob - self._prev_knob
         self._prev_knob = frame.knob
+        if frame.source == self.cfg.position_source:
+            self._last_pos_frame = frame
         self._last_frame = frame
         self._frame_count += 1
 
@@ -305,7 +313,9 @@ class GameEngine(Service):
 
     def _update_round(self, dt: float, now: float) -> None:
         assert self.level is not None
-        frame = self._last_frame
+        # Buttons and the knob may come from one board while the position comes
+        # from another, so movement follows its own source's last frame.
+        frame = self._last_pos_frame if self.cfg.input_mode == "position" else self._last_frame
         if frame is not None:
             self._move(frame, dt, now)
         self.patient.update(dt)
@@ -323,7 +333,7 @@ class GameEngine(Service):
 
     def _move(self, frame: InputFrame, dt: float, now: float) -> None:
         assert self.level is not None
-        if self.cfg.input_mode == "position" and frame.source == "mcu":
+        if self.cfg.input_mode == "position":
             self._move_absolute(frame, dt, now)
             return
         tx, ty = frame.tilt_x, frame.tilt_y
@@ -353,20 +363,41 @@ class GameEngine(Service):
             self.x, self.y = nx, ny
 
     def _move_absolute(self, frame: InputFrame, dt: float, now: float) -> None:
-        """Position mode: tilt_x/tilt_y carry the hand position in -1..1."""
+        """Position mode: move the tool by how much the distances changed.
+
+        Only the difference between two consecutive frames counts, never the
+        distance itself: the tool keeps whatever place it has and the hand
+        pushes it from there, so no reading can ever pull it to a fixed spot.
+        A jump larger than `position_max_step_mm` is the beam hitting something
+        other than the wall and is dropped.
+        """
         assert self.level is not None
-        target_x = (frame.tilt_x + 1.0) / 2.0 * (self.width - 1)
-        target_y = (frame.tilt_y + 1.0) / 2.0 * (self.height - 1)
-        tau = self.cfg.position_smooth_tau_s
+        if not frame.distance_mm or not frame.distance_y_mm:
+            self._pos_prev = None  # no echo: wait for a fresh pair to compare
+            return
+        mm_x, mm_y = float(frame.distance_mm), float(frame.distance_y_mm)
+        if self._pos_prev is None:
+            self._pos_prev = (mm_x, mm_y)
+            return
+        dx_mm = mm_x - self._pos_prev[0]
+        dy_mm = mm_y - self._pos_prev[1]
+        self._pos_prev = (mm_x, mm_y)
+        limit = self.cfg.position_max_step_mm
+        if abs(dx_mm) > limit:
+            dx_mm = 0.0
+        if abs(dy_mm) > limit:
+            dy_mm = 0.0
+        if self.cfg.position_invert_x:
+            dx_mm = -dx_mm
+        if self.cfg.position_invert_y:
+            dy_mm = -dy_mm
+        scale = self.cfg.position_px_per_mm * self.sensitivity
         if now < self.steady_until:
-            tau *= 1.0 / max(1e-6, self.cfg.steady_factor)  # steady = follow more slowly
-        alpha = dt / (tau + dt)
-        nx = self.x + (target_x - self.x) * alpha
-        ny = self.y + (target_y - self.y) * alpha
-        vx = (nx - self.x) / max(dt, 1e-6) / self.cfg.speed_px_per_s
-        vy = (ny - self.y) / max(dt, 1e-6) / self.cfg.speed_px_per_s
+            scale *= self.cfg.steady_factor
+        vx = dx_mm * scale / max(dt, 1e-6) / self.cfg.speed_px_per_s
+        vy = dy_mm * scale / max(dt, 1e-6) / self.cfg.speed_px_per_s
         self.metrics.add_tilt(vx, vy, math.hypot(vx, vy) > self.cfg.deadzone_g)
-        self._step_towards(nx, ny, now)
+        self._step_towards(self.x + dx_mm * scale, self.y + dy_mm * scale, now)
 
     def _step_towards(self, nx: float, ny: float, now: float) -> None:
         """Walk to (nx, ny) in sub-steps so a hand jump cannot tunnel a wall."""

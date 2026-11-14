@@ -35,7 +35,15 @@ constexpr float TILT_CLAMP_G = 1.0f;
 // 1 = motion (board upright, leaky-velocity from the accelerometer)
 // 2 = position (two Modulino Distance against two perpendicular walls;
 //     needs the app config game.input_mode = "position")
-constexpr uint8_t CONTROL_MODE = 2;
+//
+// Two boards run this firmware: the game board (buttons, knob, tilt) and the
+// hand-held remote (the two distance sensors). Build the remote's image with
+//   PLATFORMIO_BUILD_FLAGS=-DSH_CONTROL_MODE=2 tools/board.sh upload
+// so the same source serves both and neither can get the other's behaviour.
+#ifndef SH_CONTROL_MODE
+#define SH_CONTROL_MODE 0
+#endif
+constexpr uint8_t CONTROL_MODE = SH_CONTROL_MODE;
 
 // --- Position control (CONTROL_MODE 2) ---
 // Both Modulino Distance modules hang on the Qwiic chain. They ship fixed to
@@ -54,9 +62,23 @@ constexpr uint8_t POS_ADDR_X = 0x2A;  // first module parks here (left wall)
 // to plug the modules in one after the other.
 constexpr bool POS_USE_XSHUT = false;  // true once the XSHUT wire is fitted
 constexpr uint8_t PIN_TOF_XSHUT = 4;   // D4 -> XSHUT pad of the X module
-constexpr uint16_t POS_MIN_MM = 30;    // maps to the left/top edge
-constexpr uint16_t POS_MAX_MM = 350;   // maps to the right/bottom edge
-constexpr float POS_CUTOFF_HZ = 8.0f;  // output smoothing
+constexpr uint16_t POS_MIN_MM = 40;   // maps to the left/top edge
+constexpr uint16_t POS_MAX_MM = 400;  // maps to the right/bottom edge
+// The chips are accurate but noisy by a few mm, which the absolute mapping
+// turns into visible jitter. A median of POS_MEDIAN samples kills single
+// spikes, and the held position only follows once the hand has really moved
+// POS_DEADBAND_MM, so the tool sits perfectly still between moves.
+// true when the module aimed at the left wall is the one on 0x29, i.e. when
+// screen X and screen Y come out the wrong way round.
+constexpr bool POS_SWAP_AXES = true;
+constexpr uint8_t POS_MEDIAN = 5;
+constexpr uint16_t POS_DEADBAND_MM = 6;
+constexpr float POS_CUTOFF_HZ = 4.0f;  // output smoothing
+// No valid echo for this long (hand out of range, beam missing the wall) is
+// reported as "no reading" instead of silently holding the last position.
+constexpr uint32_t POS_STALE_MS = 800;
+// A sensor that answers but has stopped ranging gets its init redone.
+constexpr uint32_t POS_REVIVE_MS = 2500;
 
 // --- Motion control (CONTROL_MODE 1) ---
 // The frame still carries the result in tiltX/tiltY, so the app is unchanged.

@@ -47,8 +47,20 @@ class GameConfig:
     # sensors against two walls, firmware CONTROL_MODE 2); keyboard frames
     # keep velocity behaviour either way.
     input_mode: str = "velocity"
+    # Which input source carries the position in "position" mode. The other
+    # source keeps delivering buttons and the knob and never moves the tool.
+    position_source: str = "mcu"  # "mcu" | "remote"
     invincible: bool = False  # testing: contacts and the clock cannot end the round
-    position_smooth_tau_s: float = 0.08  # seconds to follow the hand; steady mode slows this
+    # Largest believable hand movement between two frames; a bigger jump is the
+    # ToF beam finding a different target and is ignored.
+    position_max_step_mm: float = 25.0
+    # Flip an axis when the sensor faces the opposite way to the screen axis.
+    position_invert_x: bool = False
+    position_invert_y: bool = True
+    # Screen pixels the tool travels per millimetre of hand movement. 1.0 is
+    # life size (a 1024 px screen then needs a metre of hand travel), 3.0 keeps
+    # the whole play field inside roughly 30 cm.
+    position_px_per_mm: float = 3.0
     speed_px_per_s: float = 420.0  # at full tilt (1 g)
     deadzone_g: float = 0.06
     knob_sensitivity_per_step: float = 0.04  # knob changes speed by this fraction per step
@@ -115,6 +127,16 @@ class McuConfig:
 
 
 @dataclass
+class RemoteConfig:
+    """The hand-held remote: a second UNO Q carrying the distance sensors."""
+
+    enabled: bool = False
+    bind_host: str = "0.0.0.0"
+    port: int = 9876
+    timeout_s: float = 1.0  # no datagram for this long counts as disconnected
+
+
+@dataclass
 class SystemConfig:
     idle_timeout_s: float = 60.0
     # DPMS-off cuts the panel's power; its inrush on wake browns out the USB hub
@@ -134,6 +156,7 @@ class Config:
     voice: VoiceConfig = field(default_factory=VoiceConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
     mcu: McuConfig = field(default_factory=McuConfig)
+    remote: RemoteConfig = field(default_factory=RemoteConfig)
     system: SystemConfig = field(default_factory=SystemConfig)
     levels_dir: str = str(REPO_DIR / "levels")
     commands: dict[str, list[str]] = field(default_factory=lambda: {k: list(v) for k, v in DEFAULT_COMMANDS.items()})
