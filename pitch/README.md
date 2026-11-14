@@ -74,6 +74,6 @@ cd app && .venv/bin/python ../pitch/make_media.py
 
 ## Numbers
 
-Every number on the slides is measured: [docs/measurements.md](../docs/measurements.md) and [docs/needle-integration.md](../docs/needle-integration.md). If a number changes there, change slides 6 and 8. The 127 MB are the three model files on disk (Vosk small 71 MB unpacked, Whistle 17 MB, Needle 12L 39 MB).
+Every number on the slides is measured ([docs/measurements.md](../docs/measurements.md), [docs/needle-integration.md](../docs/needle-integration.md)), except the CO₂ tile on slide 8: that is the SCI estimate from published power figures, 0.07–0.12 g CO₂e per 75 s round ([calculation](../docs/technical-documentation.md#environmental-impact-sci)); replace it once our own power measurement exists. If a number changes there, change slides 6 and 8. The 127 MB are the three model files on disk (Vosk small 71 MB unpacked, Whistle 17 MB, Needle 12L 39 MB).
 
 Fonts: SIL Open Font License 1.1, licences in `fonts/`.
